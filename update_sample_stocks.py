@@ -31,7 +31,7 @@ def fetch_and_update():
             print("Error: Empty CSV received from NSE.")
             sys.exit(1)
             
-        # Clean header column names to find 'SYMBOL'
+        # Clean header column names to find 'SYMBOL' and 'NAME OF COMPANY'
         cleaned_header = [col.strip().upper() for col in header]
         try:
             symbol_index = cleaned_header.index('SYMBOL')
@@ -39,24 +39,32 @@ def fetch_and_update():
             print("Error: Could not find 'SYMBOL' column in the CSV.")
             sys.exit(1)
             
-        symbols = []
+        try:
+            name_index = cleaned_header.index('NAME OF COMPANY')
+        except ValueError:
+            name_index = symbol_index
+            
+        stocks_data = []
         for row in reader:
             if not row or len(row) <= symbol_index:
                 continue
             symbol = row[symbol_index].strip()
+            name = row[name_index].strip() if len(row) > name_index else symbol
             if symbol and symbol != 'SYMBOL':
-                symbols.append(symbol)
+                stocks_data.append((symbol, name))
                 
-        # Sort symbols alphabetically
-        symbols.sort()
+        # Sort stocks alphabetically by symbol
+        stocks_data.sort(key=lambda x: x[0])
         
-        print(f"Found {len(symbols)} stock symbols. Writing to {OUTPUT_FILE}...")
+        print(f"Found {len(stocks_data)} stock symbols. Writing to {OUTPUT_FILE}...")
         
-        with open(OUTPUT_FILE, 'w', encoding='utf-8') as out_f:
-            for s in symbols:
-                out_f.write(f"{s}\n")
+        with open(OUTPUT_FILE, 'w', encoding='utf-8', newline='') as out_f:
+            writer = csv.writer(out_f)
+            writer.writerow(['symbol', 'name'])
+            for symbol, name in stocks_data:
+                writer.writerow([symbol, name])
                 
-        print(f"Success! Updated {OUTPUT_FILE} with {len(symbols)} Indian market stocks.")
+        print(f"Success! Updated {OUTPUT_FILE} with {len(stocks_data)} Indian market stocks.")
         
     except Exception as e:
         print(f"Error processing stock symbols: {e}")

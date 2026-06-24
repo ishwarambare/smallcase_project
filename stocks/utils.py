@@ -83,22 +83,33 @@ def fetch_index_historical_data(index_symbol, period='1mo'):
     Returns:
         List of {date, value} dictionaries
     """
+    import math, pandas as pd
     try:
-        # Convert our period format to yfinance format
         yf_period = TIME_PERIODS.get(period, '1mo')
-        
-        index = yf.Ticker(index_symbol)
-        df = yf.download(index_symbol, period=yf_period, progress=False)
-        
-        if not df.empty:
-            result = []
-            for date, row in df.iterrows():
-                result.append({
-                    'date': date.strftime('%Y-%m-%d'),
-                    'value': float(row['Close'])
-                })
-            return result
-        return []
+        df = yf.download(index_symbol, period=yf_period, progress=False, auto_adjust=True)
+
+        if df.empty:
+            return []
+
+        # yfinance now returns MultiIndex even for single tickers: (field, ticker)
+        if isinstance(df.columns, pd.MultiIndex):
+            close_col = ('Close', index_symbol)
+            if close_col not in df.columns:
+                # Try finding Close column regardless of ticker label
+                close_cols = [c for c in df.columns if c[0] == 'Close']
+                if not close_cols:
+                    return []
+                close_col = close_cols[0]
+            close_series = df[close_col].dropna()
+        else:
+            close_series = df['Close'].dropna()
+
+        result = []
+        for date, value in close_series.items():
+            price = float(value)
+            if not math.isnan(price) and price > 0:
+                result.append({'date': date.strftime('%Y-%m-%d'), 'value': price})
+        return result
     except Exception as e:
         print(f"Error fetching index data for {index_symbol}: {e}")
         return []
@@ -115,21 +126,32 @@ def fetch_stock_historical_data(symbol, period='1mo'):
     Returns:
         List of {date, value} dictionaries
     """
+    import math, pandas as pd
     try:
         yf_period = TIME_PERIODS.get(period, '1mo')
-        
-        stock = yf.Ticker(symbol)
-        df = yf.download(symbol, period=yf_period, progress=False)
-        
-        if not df.empty:
-            result = []
-            for date, row in df.iterrows():
-                result.append({
-                    'date': date.strftime('%Y-%m-%d'),
-                    'value': float(row['Close'])
-                })
-            return result
-        return []
+        df = yf.download(symbol, period=yf_period, progress=False, auto_adjust=True)
+
+        if df.empty:
+            return []
+
+        # yfinance now returns MultiIndex even for single tickers: (field, ticker)
+        if isinstance(df.columns, pd.MultiIndex):
+            close_col = ('Close', symbol)
+            if close_col not in df.columns:
+                close_cols = [c for c in df.columns if c[0] == 'Close']
+                if not close_cols:
+                    return []
+                close_col = close_cols[0]
+            close_series = df[close_col].dropna()
+        else:
+            close_series = df['Close'].dropna()
+
+        result = []
+        for date, value in close_series.items():
+            price = float(value)
+            if not math.isnan(price) and price > 0:
+                result.append({'date': date.strftime('%Y-%m-%d'), 'value': price})
+        return result
     except Exception as e:
         print(f"Error fetching stock data for {symbol}: {e}")
         return []
@@ -161,43 +183,35 @@ def calculate_basket_historical_performance(basket, period='1mo'):
     
     if not stock_histories:
         return []
-    
-    # Get common dates across all stocks
+
+    # Build fast date->price lookup per symbol
+    symbol_lookup = {}
+    for sym, hist_data in stock_histories.items():
+        symbol_lookup[sym] = {point['date']: point['value'] for point in hist_data}
+
+    # Collect union of all dates
     all_dates = set()
-    for hist_data in stock_histories.values():
-        for point in hist_data:
-            all_dates.add(point['date'])
-    
-    common_dates = sorted(all_dates)
-    
-    # Calculate basket value for each date
+    for date_map in symbol_lookup.values():
+        all_dates.update(date_map.keys())
+
     basket_performance = []
-    
-    for date in common_dates:
+
+    for date in sorted(all_dates):
         total_value = 0
-        all_stocks_have_data = True
-        
+        covered_weight = 0
+
         for item in items:
             symbol = item.stock.symbol
-            if symbol in stock_histories:
-                # Find price for this date
-                date_data = next((d for d in stock_histories[symbol] if d['date'] == date), None)
-                if date_data:
-                    stock_value = float(item.quantity) * date_data['value']
-                    total_value += stock_value
-                else:
-                    all_stocks_have_data = False
-                    break
-            else:
-                all_stocks_have_data = False
-                break
-        
-        if all_stocks_have_data:
-            basket_performance.append({
-                'date': date,
-                'value': total_value
-            })
-    
+            date_map = symbol_lookup.get(symbol, {})
+            price = date_map.get(date)
+            if price is not None:
+                total_value += float(item.quantity) * price
+                covered_weight += float(item.weight_percentage)
+
+        # Include date if we have data for at least 80% of the basket weight
+        if covered_weight >= 80 and total_value > 0:
+            basket_performance.append({'date': date, 'value': total_value})
+
     return basket_performance
 
 
@@ -219,69 +233,84 @@ def fetch_stock_price(symbol):
 
 def update_stock_prices_bulk(symbols):
     """
-    OPTIMIZATION: Update prices for multiple stocks in bulk (much faster than one-by-one)
-    
+    Update prices for multiple stocks in bulk using yfinance.
+    Processes in batches of 50 to stay within API limits.
+    Skips NaN/invalid prices gracefully.
+
     Args:
-        symbols: List of stock symbols to update
-    
+        symbols: List of stock symbols to update (with .NS or .BO suffix)
+
     Returns:
         Number of stocks updated
     """
-    from django.utils import timezone
-    from datetime import timedelta
-    
+    import math
+    import pandas as pd
+
     if not symbols:
         return 0
-    
-    try:
-        # Fetch data for all symbols at once (much faster!)
-        symbols_str = ' '.join(symbols)
-        data = yf.download(symbols_str, period='1d', group_by='ticker', progress=False)
-        
-        updated_count = 0
-        for symbol in symbols:
-            try:
-                if len(symbols) == 1:
-                    # Single stock
-                    if not data.empty and 'Close' in data.columns:
-                        price = float(data['Close'].iloc[-1])
-                        stock = Stock.objects.get(symbol=symbol)
-                        stock.current_price = Decimal(str(price))
-                        stock.save()
-                        updated_count += 1
-                else:
-                    # Multiple stocks
-                    if symbol in data.columns.get_level_values(0):
-                        stock_data = data[symbol]
-                        if not stock_data.empty and 'Close' in stock_data.columns:
-                            price = float(stock_data['Close'].iloc[-1])
-                            stock = Stock.objects.get(symbol=symbol)
-                            stock.current_price = Decimal(str(price))
-                            stock.save()
-                            updated_count += 1
-            except Exception as e:
-                print(f"Error updating {symbol}: {e}")
+
+    updated_count = 0
+    batch_size = 50
+    batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+
+    for batch_num, batch in enumerate(batches):
+        try:
+            batch_str = ' '.join(batch)
+            data = yf.download(batch_str, period='2d', group_by='ticker', progress=False, auto_adjust=True)
+
+            if data.empty:
                 continue
-        
-        print(f"Bulk updated {updated_count} stock prices")
-        return updated_count
-        
-    except Exception as e:
-        print(f"Error in bulk update: {e}")
-        # Fallback to individual updates
-        updated_count = 0
-        for symbol in symbols:
-            try:
-                price = fetch_stock_price(symbol)
-                if price:
-                    stock = Stock.objects.get(symbol=symbol)
-                    stock.current_price = Decimal(str(price))
-                    stock.save()
+
+            # Determine if result is single-ticker (flat columns) or multi-ticker (MultiIndex)
+            is_multi = isinstance(data.columns, pd.MultiIndex)
+
+            for symbol in batch:
+                try:
+                    if is_multi:
+                        # Multi-ticker: columns are (ticker, field) — Level 0 = ticker, Level 1 = field
+                        if symbol not in data.columns.get_level_values(0):
+                            continue
+                        ticker_data = data.xs(symbol, axis=1, level=0)
+                    else:
+                        # Single-ticker: flat columns like 'Close'
+                        ticker_data = data
+
+                    if ticker_data.empty or 'Close' not in ticker_data.columns:
+                        continue
+
+                    # Get last valid (non-NaN) close price
+                    close_series = ticker_data['Close'].dropna()
+                    if close_series.empty:
+                        continue
+
+                    price = float(close_series.iloc[-1])
+                    if math.isnan(price) or math.isinf(price) or price <= 0:
+                        continue
+
+                    Stock.objects.filter(symbol=symbol).update(
+                        current_price=Decimal(str(round(price, 2)))
+                    )
                     updated_count += 1
-            except Exception as e:
-                print(f"Error updating {symbol}: {e}")
-                continue
-        return updated_count
+
+                except Exception:
+                    continue
+
+        except Exception as e:
+            print(f"[PriceFetch] Batch {batch_num + 1} failed: {e}")
+            # Fallback: fetch one-by-one for failed batch
+            for symbol in batch:
+                try:
+                    price = fetch_stock_price(symbol)
+                    if price and not math.isnan(price) and price > 0:
+                        Stock.objects.filter(symbol=symbol).update(
+                            current_price=Decimal(str(round(price, 2)))
+                        )
+                        updated_count += 1
+                except Exception:
+                    continue
+
+    print(f"[PriceFetch] Updated prices for {updated_count} / {len(symbols)} stocks")
+    return updated_count
 
 
 def update_stock_prices():

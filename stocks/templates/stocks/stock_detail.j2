@@ -1,0 +1,409 @@
+{% extends 'stocks/base.j2' %}
+{% block title %}{{ fundamentals.name }} ({{ symbol }}) — Stock Analysis{% endblock %}
+
+{% block header %}
+    {{ super() }}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{{ static('css/pages/stock_detail.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="stock-detail-container">
+
+    {# ---- Back Link ---- #}
+    <a href="{{ url('home') }}" class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Back to Dashboard
+    </a>
+
+    {# ---- Hero ---- #}
+    <div class="stock-hero">
+        <div class="stock-hero-left">
+            <div class="stock-ticker">{{ symbol }}</div>
+            <div class="stock-company-name">{{ fundamentals.name or symbol }}</div>
+            {% if fundamentals.sector and fundamentals.sector != 'N/A' %}
+            <span class="stock-sector-badge">{{ fundamentals.sector }}{% if fundamentals.industry and fundamentals.industry != 'N/A' %} · {{ fundamentals.industry }}{% endif %}</span>
+            {% endif %}
+        </div>
+
+        <div class="stock-hero-right">
+            <div class="stock-current-price">
+                {% if fundamentals.current_price %}
+                    ₹{{ "%.2f"|format(fundamentals.current_price) }}
+                {% else %}
+                    <span style="color:var(--text-secondary);font-size:1.2rem;">Price unavailable</span>
+                {% endif %}
+            </div>
+            {% if day_change is not none %}
+            <div class="day-change {% if day_change >= 0 %}positive{% else %}negative{% endif %}">
+                {% if day_change >= 0 %}▲{% else %}▼{% endif %}
+                ₹{{ "%.2f"|format(day_change|abs) }} ({{ "%.2f"|format(day_change_pct|abs) }}%)
+            </div>
+            {% endif %}
+        </div>
+
+        {# ---- Recommendation Badge ---- #}
+        <div style="width:100%">
+            <div class="recommendation-hero">
+                <div class="verdict-badge {{ recommendation.verdict_color }}">
+                    {{ recommendation.verdict_emoji }} {{ recommendation.verdict }}
+                </div>
+                <div class="score-meter">
+                    <div class="score-bar-wrap">
+                        {% set score_pct = ((recommendation.score + recommendation.max_score) / (recommendation.max_score * 2) * 100) %}
+                        {% if recommendation.score >= 2 %}
+                            {% set bar_color = '#22c55e' %}
+                        {% elif recommendation.score >= -1 %}
+                            {% set bar_color = '#eab308' %}
+                        {% else %}
+                            {% set bar_color = '#ef4444' %}
+                        {% endif %}
+                        <div class="score-bar-fill" style="width:{{ score_pct }}%;background:{{ bar_color }};"></div>
+                    </div>
+                    <span>Score: {{ recommendation.score }} / {{ recommendation.max_score }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ---- Key Fundamentals ---- #}
+    <div class="detail-section">
+        <div class="section-heading">📊 Key Fundamentals</div>
+        <div class="metrics-grid">
+
+            {% macro metric(label, value, fmt='plain', cls='') %}
+            <div class="metric-card">
+                <div class="metric-label">{{ label }}</div>
+                <div class="metric-value {{ cls }}">
+                    {% if value is none %}—
+                    {% elif fmt == 'price' %}₹{{ "%.2f"|format(value) }}
+                    {% elif fmt == 'cr' %}
+                        {% if value >= 1e12 %}₹{{ "%.2f"|format(value/1e12) }}L Cr
+                        {% elif value >= 1e9 %}₹{{ "%.2f"|format(value/1e9) }} Cr
+                        {% elif value >= 1e7 %}₹{{ "%.2f"|format(value/1e7) }} Cr
+                        {% else %}₹{{ "%.0f"|format(value) }}
+                        {% endif %}
+                    {% elif fmt == 'pct' %}{{ "%.2f"|format(value * 100) }}%
+                    {% elif fmt == 'vol' %}{{ "{:,}".format(value|int) }}
+                    {% elif fmt == 'x' %}{{ "%.2f"|format(value) }}x
+                    {% elif fmt == 'dec2' %}{{ "%.2f"|format(value) }}
+                    {% else %}{{ value }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endmacro %}
+
+            {{ metric("Current Price", fundamentals.current_price, 'price') }}
+            {{ metric("Day Open", fundamentals.open, 'price') }}
+            {{ metric("Day High", fundamentals.day_high, 'price') }}
+            {{ metric("Day Low", fundamentals.day_low, 'price') }}
+            {{ metric("Prev. Close", fundamentals.previous_close, 'price') }}
+            {{ metric("Market Cap", fundamentals.market_cap, 'cr') }}
+            {{ metric("P/E Ratio", fundamentals.pe_ratio, 'dec2') }}
+            {{ metric("Forward P/E", fundamentals.forward_pe, 'dec2') }}
+            {{ metric("EPS (TTM)", fundamentals.eps, 'price') }}
+            {{ metric("Dividend Yield", fundamentals.dividend_yield, 'pct') }}
+            {{ metric("Beta", fundamentals.beta, 'dec2') }}
+            {{ metric("Book Value", fundamentals.book_value, 'price') }}
+            {{ metric("Price/Book", fundamentals.price_to_book, 'x') }}
+            {{ metric("Volume", fundamentals.volume, 'vol') }}
+            {{ metric("Avg. Volume", fundamentals.avg_volume, 'vol') }}
+            {{ metric("52W High", fundamentals.week_52_high, 'price') }}
+            {{ metric("52W Low", fundamentals.week_52_low, 'price') }}
+        </div>
+
+        {# 52-week range bar #}
+        {% if week52_pct is not none %}
+        <div style="margin-top:20px;">
+            <div style="font-size:0.8rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);letter-spacing:.05em;margin-bottom:6px;">
+                52-Week Range Position
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:0.8rem;color:var(--text-secondary);">
+                <span>₹{{ "%.0f"|format(fundamentals.week_52_low) }}</span>
+                <div class="week52-bar-wrap" style="flex:1;position:relative;">
+                    <div class="week52-bar-fill" style="width:100%;"></div>
+                    <div class="week52-marker" style="left:{{ week52_pct }}%;"></div>
+                </div>
+                <span>₹{{ "%.0f"|format(fundamentals.week_52_high) }}</span>
+            </div>
+            <div style="margin-top:4px;font-size:0.8rem;color:var(--text-secondary);text-align:center;">
+                Current price is at <strong>{{ week52_pct }}%</strong> of 52-week range
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ---- Technical Indicators ---- #}
+    <div class="detail-section">
+        <div class="section-heading">📉 Technical Indicators</div>
+        {% if indicators.error %}
+        <div style="color:var(--text-secondary);font-style:italic;">⚠ {{ indicators.error }}</div>
+        {% else %}
+        <div class="indicators-grid">
+
+            {# RSI #}
+            <div class="indicator-row {{ indicators.rsi_signal }}">
+                <div>
+                    <div class="indicator-name">RSI (14-day)</div>
+                    <div class="indicator-val">{{ indicators.rsi if indicators.rsi else "—" }}
+                        {% if indicators.rsi %}&nbsp;·
+                            {% if indicators.rsi < 30 %}Oversold{% elif indicators.rsi > 70 %}Overbought{% else %}Neutral zone{% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="indicator-signal {{ indicators.rsi_signal }}">
+                    {% if indicators.rsi_signal == 'bullish' %}Buy Signal{% elif indicators.rsi_signal == 'bearish' %}Sell Signal{% else %}Neutral{% endif %}
+                </span>
+            </div>
+
+            {# SMA 50 #}
+            {% if indicators.sma50 %}
+            <div class="indicator-row {{ indicators.sma50_signal }}">
+                <div>
+                    <div class="indicator-name">50-Day SMA</div>
+                    <div class="indicator-val">₹{{ indicators.sma50 }} ·
+                        {% if indicators.sma50_signal == 'bullish' %}Price above SMA{% else %}Price below SMA{% endif %}
+                    </div>
+                </div>
+                <span class="indicator-signal {{ indicators.sma50_signal }}">
+                    {% if indicators.sma50_signal == 'bullish' %}Bullish{% else %}Bearish{% endif %}
+                </span>
+            </div>
+            {% endif %}
+
+            {# SMA 200 #}
+            {% if indicators.sma200 %}
+            <div class="indicator-row {{ indicators.sma200_signal }}">
+                <div>
+                    <div class="indicator-name">200-Day SMA</div>
+                    <div class="indicator-val">₹{{ indicators.sma200 }} ·
+                        {% if indicators.sma200_signal == 'bullish' %}Price above SMA{% else %}Price below SMA{% endif %}
+                    </div>
+                </div>
+                <span class="indicator-signal {{ indicators.sma200_signal }}">
+                    {% if indicators.sma200_signal == 'bullish' %}Bullish{% else %}Bearish{% endif %}
+                </span>
+            </div>
+            {% endif %}
+
+            {# MACD #}
+            {% if indicators.macd is not none %}
+            <div class="indicator-row {{ indicators.macd_signal }}">
+                <div>
+                    <div class="indicator-name">MACD (12, 26, 9)</div>
+                    <div class="indicator-val">MACD {{ indicators.macd }} · Signal {{ indicators.macd_signal_line }}</div>
+                </div>
+                <span class="indicator-signal {{ indicators.macd_signal }}">
+                    {% if indicators.macd_signal == 'bullish' %}Bullish{% else %}Bearish{% endif %}
+                </span>
+            </div>
+            {% endif %}
+
+            {# Bollinger Bands #}
+            {% if indicators.bb_upper %}
+            <div class="indicator-row {{ indicators.bb_signal }}">
+                <div>
+                    <div class="indicator-name">Bollinger Bands</div>
+                    <div class="indicator-val">Upper ₹{{ indicators.bb_upper }} · Lower ₹{{ indicators.bb_lower }}</div>
+                </div>
+                <span class="indicator-signal {{ indicators.bb_signal }}">
+                    {% if indicators.bb_signal == 'bullish' %}Near Support{% elif indicators.bb_signal == 'bearish' %}Near Resistance{% else %}Mid Range{% endif %}
+                </span>
+            </div>
+            {% endif %}
+
+            {# Volume #}
+            <div class="indicator-row {{ indicators.volume_signal }}">
+                <div>
+                    <div class="indicator-name">Volume Trend</div>
+                    <div class="indicator-val">
+                        Today {{ "{:,}".format(indicators.current_volume) if indicators.current_volume else "—" }} ·
+                        10D Avg {{ "{:,}".format(indicators.avg_volume_10) if indicators.avg_volume_10 else "—" }}
+                    </div>
+                </div>
+                <span class="indicator-signal {{ indicators.volume_signal }}">
+                    {% if indicators.volume_signal == 'bullish' %}High Volume{% else %}Normal{% endif %}
+                </span>
+            </div>
+
+        </div>
+        {% endif %}
+    </div>
+
+    {# ---- Should I Buy? ---- #}
+    <div class="detail-section">
+        <div class="section-heading">🤔 Should I Buy? — Analysis</div>
+        <div class="reasons-grid">
+            <div class="reasons-column bullish-col">
+                <h4>✅ Bullish Reasons</h4>
+                {% if recommendation.bullish_reasons %}
+                    {% for reason in recommendation.bullish_reasons %}
+                    <div class="reason-item bullish">
+                        <span class="reason-icon">✅</span>
+                        <span>{{ reason }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="no-reasons">No bullish signals found for this stock.</div>
+                {% endif %}
+            </div>
+            <div class="reasons-column bearish-col">
+                <h4>❌ Risk Factors</h4>
+                {% if recommendation.bearish_reasons %}
+                    {% for reason in recommendation.bearish_reasons %}
+                    <div class="reason-item bearish">
+                        <span class="reason-icon">❌</span>
+                        <span>{{ reason }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="no-reasons">No major risk factors detected.</div>
+                {% endif %}
+            </div>
+        </div>
+        <div style="margin-top:20px;padding:14px 16px;background:var(--bg-body);border:1px solid var(--border-color);border-radius:var(--radius-md);font-size:0.8rem;color:var(--text-secondary);">
+            ⚠️ <strong>Disclaimer:</strong> This analysis is for educational purposes only and is not financial advice.
+            Always do your own research and consult a SEBI-registered financial advisor before investing.
+        </div>
+    </div>
+
+    {# ---- Price Chart ---- #}
+    <div class="detail-section">
+        <div class="section-heading">📈 Price History</div>
+        <div class="period-btns">
+            {% for p, label in [('1d','1D'),('7d','1W'),('1m','1M'),('3m','3M'),('6m','6M'),('1y','1Y')] %}
+            <button class="period-btn-detail {% if p == '1m' %}active{% endif %}" data-period="{{ p }}">{{ label }}</button>
+            {% endfor %}
+        </div>
+        <div id="chart-loading" style="text-align:center;padding:40px;color:var(--text-secondary);display:none;">Loading chart…</div>
+        <div id="chart-error" style="text-align:center;padding:40px;color:#dc2626;display:none;"></div>
+        <div style="position:relative;height:360px;">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+
+    {# ---- About ---- #}
+    {% if fundamentals.description %}
+    <div class="detail-section">
+        <div class="section-heading">🏢 About {{ fundamentals.name }}</div>
+        <div class="stock-description" id="stockDescription">{{ fundamentals.description }}</div>
+        <button class="read-more-btn" id="readMoreBtn" onclick="toggleDescription()">Read more ▼</button>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+const SYMBOL = "{{ symbol }}";
+
+// ---- Price Chart ----
+let priceChart = null;
+
+async function loadChart(period) {
+    const canvas  = document.getElementById('priceChart');
+    const loading = document.getElementById('chart-loading');
+    const errDiv  = document.getElementById('chart-error');
+
+    loading.style.display = 'block';
+    errDiv.style.display  = 'none';
+    canvas.style.display  = 'none';
+
+    try {
+        const resp = await fetch(`/en/api/stock-history/?symbol=${encodeURIComponent(SYMBOL)}&period=${period}`);
+        const data = await resp.json();
+
+        if (!data.success || !data.dates || data.dates.length === 0) {
+            errDiv.textContent = 'No chart data available for this period.';
+            errDiv.style.display = 'block';
+            loading.style.display = 'none';
+            return;
+        }
+
+        loading.style.display = 'none';
+        canvas.style.display  = 'block';
+
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const lineColor = '#3b82f6';
+
+        if (priceChart) priceChart.destroy();
+        priceChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: data.dates,
+                datasets: [{
+                    label: SYMBOL,
+                    data: data.prices,
+                    borderColor: lineColor,
+                    backgroundColor: lineColor + '18',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    fill: true,
+                    tension: 0.3,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `₹${ctx.parsed.y.toFixed(2)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { maxTicksLimit: 8, color: isDark ? '#94a3b8' : '#64748b' },
+                        grid: { color: isDark ? '#1e293b' : '#f1f5f9' }
+                    },
+                    y: {
+                        ticks: {
+                            color: isDark ? '#94a3b8' : '#64748b',
+                            callback: v => '₹' + v.toFixed(0)
+                        },
+                        grid: { color: isDark ? '#1e293b' : '#f1f5f9' }
+                    }
+                }
+            }
+        });
+
+    } catch(e) {
+        errDiv.textContent = 'Failed to load chart data.';
+        errDiv.style.display = 'block';
+        loading.style.display = 'none';
+        console.error(e);
+    }
+}
+
+document.querySelectorAll('.period-btn-detail').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.period-btn-detail').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadChart(btn.dataset.period);
+    });
+});
+
+loadChart('1m');
+
+// ---- Description toggle ----
+function toggleDescription() {
+    const desc = document.getElementById('stockDescription');
+    const btn  = document.getElementById('readMoreBtn');
+    if (desc.classList.contains('expanded')) {
+        desc.classList.remove('expanded');
+        btn.textContent = 'Read more ▼';
+    } else {
+        desc.classList.add('expanded');
+        btn.textContent = 'Read less ▲';
+    }
+}
+</script>
+{% endblock %}

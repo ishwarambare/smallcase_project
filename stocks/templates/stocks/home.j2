@@ -97,14 +97,19 @@
                 </thead>
                 <tbody>
                     {% for stock in stocks %}
-                    <tr>
-                        <td><strong>{{ stock.symbol }}</strong></td>
+                    <tr onclick="window.location='{{ url('stock_detail', args=[stock.symbol]) }}'" style="cursor:pointer;">
+                        <td>
+                            <a href="{{ url('stock_detail', args=[stock.symbol]) }}" style="font-weight:700;color:var(--primary-color);text-decoration:none;">
+                                {{ stock.symbol }}
+                            </a>
+                        </td>
                         <td>{{ stock.name }}</td>
-                        <td>₹{{ stock.current_price }}</td>
+                        <td>{% if stock.current_price %}₹{{ stock.current_price }}{% else %}<span style="color:var(--text-secondary)">—</span>{% endif %}</td>
                         <td>{{ stock.last_updated.strftime('%d %b %Y %H:%M') }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
+
             </table>
             {% else %}
             <div class="empty-state">

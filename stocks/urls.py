@@ -6,8 +6,12 @@ from . import views
 urlpatterns = [
     # Home and stock management
     path('', views.home, name='home'),
+    path('stock/<str:symbol>/', views.stock_detail, name='stock_detail'),
     path('populate-stocks/', views.populate_stocks, name='populate_stocks'),
     path('update-prices/', views.update_prices, name='update_prices'),
+
+    # Stock history API (for charts)
+    path('api/stock-history/', views.stock_history_api, name='stock_history_api'),
     
     # Basket management
     path('basket/create/', views.basket_create, name='basket_create'),

@@ -82,6 +82,86 @@ def home(request):
     return render(request, 'stocks/home.j2', context)
 
 
+def stock_detail(request, symbol):
+    """Stock detail page with fundamentals, technical indicators, and buy recommendation."""
+    from .stock_analysis import get_stock_fundamentals, get_technical_indicators, get_buy_recommendation
+
+    # Try to find in DB first for name/price fallback
+    db_stock = Stock.objects.filter(symbol=symbol).first()
+
+    # Cache analysis for 15 minutes (yfinance calls are slow)
+    cache_key = f'stock_detail_{symbol}'
+    cached = cache.get(cache_key)
+    if cached:
+        context = cached
+    else:
+        fundamentals = get_stock_fundamentals(symbol)
+        indicators = get_technical_indicators(symbol)
+        recommendation = get_buy_recommendation(fundamentals, indicators)
+
+        # Fallback to DB values if Yahoo Finance didn't return them
+        if db_stock and not fundamentals.get("current_price"):
+            fundamentals["current_price"] = float(db_stock.current_price) if db_stock.current_price else None
+        if db_stock and not fundamentals.get("name"):
+            fundamentals["name"] = db_stock.name
+
+        # Day change calculation
+        price = fundamentals.get("current_price")
+        prev_close = fundamentals.get("previous_close")
+        day_change = None
+        day_change_pct = None
+        if price and prev_close and prev_close > 0:
+            day_change = round(price - prev_close, 2)
+            day_change_pct = round((day_change / prev_close) * 100, 2)
+
+        # 52-week position (% from low)
+        week52_pct = None
+        w52h = fundamentals.get("week_52_high")
+        w52l = fundamentals.get("week_52_low")
+        if price and w52h and w52l and (w52h - w52l) > 0:
+            week52_pct = round(((price - w52l) / (w52h - w52l)) * 100, 1)
+
+        context = {
+            'symbol': symbol,
+            'db_stock': db_stock,
+            'fundamentals': fundamentals,
+            'indicators': indicators,
+            'recommendation': recommendation,
+            'day_change': day_change,
+            'day_change_pct': day_change_pct,
+            'week52_pct': week52_pct,
+        }
+        cache.set(cache_key, context, 900)  # Cache 15 min
+
+    return render(request, 'stocks/stock_detail.j2', context)
+
+
+def stock_history_api(request):
+    """API endpoint: returns historical close prices for a stock symbol."""
+    from .utils import fetch_stock_historical_data, TIME_PERIODS
+    symbol = request.GET.get('symbol', '').strip()
+    period = request.GET.get('period', '1m')
+    if period not in TIME_PERIODS:
+        period = '1m'
+    if not symbol:
+        return JsonResponse({'success': False, 'error': 'No symbol provided'})
+    cache_key = f'stock_hist_{symbol}_{period}'
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached)
+    data = fetch_stock_historical_data(symbol, period)
+    if not data:
+        return JsonResponse({'success': False, 'error': 'No data available'})
+    result = {
+        'success': True,
+        'symbol': symbol,
+        'dates': [d['date'] for d in data],
+        'prices': [d['value'] for d in data],
+    }
+    cache.set(cache_key, result, 900)
+    return JsonResponse(result)
+
+
 @login_required
 def populate_stocks(request):
     """Populate database with Indian stocks"""

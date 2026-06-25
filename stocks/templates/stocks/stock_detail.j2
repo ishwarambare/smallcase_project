@@ -564,6 +564,221 @@
     </div>
     {% endif %}
 
+    {# ======================================================= #}
+    {# ---- AI Research Summary (async LLM) ---- #}
+    {# ======================================================= #}
+    <div class="detail-section ai-summary-section" id="aiSummarySection">
+        <div class="section-heading">
+            🤖 AI Research Summary
+            <span class="ai-badge">Powered by AI</span>
+        </div>
+        <div id="aiSummaryContent">
+            <div class="ai-loading" id="aiSummaryLoading">
+                <div class="ai-spinner"></div>
+                <span>Generating AI analysis…</span>
+            </div>
+            <div id="aiSummaryResult" style="display:none;">
+                <div class="ai-summary-grid">
+                    <div class="ai-summary-card overview-card">
+                        <div class="ai-card-icon">🏢</div>
+                        <div class="ai-card-title">Business Overview</div>
+                        <div class="ai-card-body" id="aiOverview"></div>
+                    </div>
+                    <div class="ai-summary-card bullish-card">
+                        <div class="ai-card-icon">✅</div>
+                        <div class="ai-card-title">Bullish Signals</div>
+                        <div class="ai-card-body" id="aiBullish"></div>
+                    </div>
+                    <div class="ai-summary-card risk-card">
+                        <div class="ai-card-icon">⚠️</div>
+                        <div class="ai-card-title">Key Risks</div>
+                        <div class="ai-card-body" id="aiRisks"></div>
+                    </div>
+                </div>
+                <div class="ai-summary-footer" id="aiSummaryFooter"></div>
+            </div>
+            <div id="aiSummaryError" style="display:none;" class="ai-error"></div>
+        </div>
+    </div>
+
+    {# ======================================================= #}
+    {# ---- Quant Intelligence Metrics ---- #}
+    {# ======================================================= #}
+    <div class="detail-section quant-section">
+        <div class="section-heading">
+            📐 Quant Intelligence Metrics
+            <span class="quant-badge">Advanced</span>
+        </div>
+        <div class="quant-grid">
+
+            {# Sharpe Ratio #}
+            <div class="quant-card {{ quant.sharpe_signal }}">
+                <div class="quant-icon">📊</div>
+                <div class="quant-label">Sharpe Ratio</div>
+                <div class="quant-value">
+                    {% if quant.sharpe_ratio is not none %}
+                        {{ "%.2f"|format(quant.sharpe_ratio) }}
+                    {% else %}—{% endif %}
+                </div>
+                <div class="quant-signal-pill {{ quant.sharpe_signal }}">
+                    {% if quant.sharpe_ratio is not none %}
+                        {% if quant.sharpe_ratio > 1.0 %}Excellent Risk-Return{% elif quant.sharpe_ratio > 0 %}Acceptable{% else %}Poor Risk-Return{% endif %}
+                    {% else %}Data Unavailable{% endif %}
+                </div>
+                <div class="quant-tooltip">Return earned per unit of total risk (>1.0 = good). Uses 6.5% RBI rate as risk-free proxy.</div>
+            </div>
+
+            {# Sortino Ratio #}
+            <div class="quant-card {{ quant.sortino_signal }}">
+                <div class="quant-icon">📉</div>
+                <div class="quant-label">Sortino Ratio</div>
+                <div class="quant-value">
+                    {% if quant.sortino_ratio is not none %}
+                        {{ "%.2f"|format(quant.sortino_ratio) }}
+                    {% else %}—{% endif %}
+                </div>
+                <div class="quant-signal-pill {{ quant.sortino_signal }}">
+                    {% if quant.sortino_ratio is not none %}
+                        {% if quant.sortino_ratio > 1.5 %}Strong Downside Protection{% elif quant.sortino_ratio > 0 %}Moderate{% else %}High Downside Risk{% endif %}
+                    {% else %}Data Unavailable{% endif %}
+                </div>
+                <div class="quant-tooltip">Like Sharpe, but only penalises downside volatility (>1.5 = strong).</div>
+            </div>
+
+            {# ADV-30 #}
+            <div class="quant-card {{ quant.adv_signal }}">
+                <div class="quant-icon">💧</div>
+                <div class="quant-label">ADV-30 (Liquidity)</div>
+                <div class="quant-value">
+                    {% if quant.adv_30 %}
+                        {% if quant.adv_30 >= 1000000 %}{{ "%.1f"|format(quant.adv_30 / 1000000) }}M{% else %}{{ "{:,}".format(quant.adv_30) }}{% endif %}
+                    {% else %}—{% endif %}
+                </div>
+                <div class="quant-signal-pill {{ quant.adv_signal }}">
+                    {% if quant.adv_30 %}
+                        {% if quant.adv_30 >= 500000 %}High Liquidity{% elif quant.adv_30 >= 100000 %}Moderate{% else %}Low Liquidity{% endif %}
+                    {% else %}Data Unavailable{% endif %}
+                </div>
+                <div class="quant-tooltip">30-day Average Daily Volume. Low ADV (&lt;100K) means large trades can move the price significantly.</div>
+            </div>
+
+            {# Put/Call Ratio #}
+            <div class="quant-card {{ quant.pcr_signal }}">
+                <div class="quant-icon">⚖️</div>
+                <div class="quant-label">Put/Call Ratio</div>
+                <div class="quant-value">
+                    {% if quant.put_call_ratio is not none %}{{ quant.put_call_ratio }}{% else %}—{% endif %}
+                </div>
+                <div class="quant-signal-pill {{ quant.pcr_signal }}">
+                    {% if quant.put_call_ratio is not none %}
+                        {% if quant.put_call_ratio > 1.2 %}Bearish Bets Heavy{% elif quant.put_call_ratio < 0.7 %}Bullish Sentiment{% else %}Balanced Market{% endif %}
+                    {% else %}No Options Data{% endif %}
+                </div>
+                <div class="quant-tooltip">PCR &gt;1.2 = more puts = bearish. PCR &lt;0.7 = more calls = bullish.</div>
+            </div>
+
+            {# Implied Volatility #}
+            <div class="quant-card {{ quant.iv_signal }}">
+                <div class="quant-icon">🌊</div>
+                <div class="quant-label">Implied Volatility</div>
+                <div class="quant-value">
+                    {% if quant.implied_volatility is not none %}{{ quant.implied_volatility }}%{% else %}—{% endif %}
+                </div>
+                <div class="quant-signal-pill {{ quant.iv_signal }}">
+                    {% if quant.implied_volatility is not none %}
+                        {% if quant.implied_volatility > 40 %}High Uncertainty{% elif quant.implied_volatility < 20 %}Low Volatility Expected{% else %}Moderate Swing Expected{% endif %}
+                    {% else %}No Options Data{% endif %}
+                </div>
+                <div class="quant-tooltip">Market's expected future volatility. High IV before earnings = expect big moves.</div>
+            </div>
+
+        </div>
+        {% if quant.error %}
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--text-secondary);font-style:italic;">
+            ⚠ Some quant metrics unavailable: {{ quant.error }}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ======================================================= #}
+    {# ---- Financial Document RAG — Chat with Documents ---- #}
+    {# ======================================================= #}
+    <div class="detail-section rag-section" id="ragSection">
+        <div class="section-heading">
+            📄 Chat with Documents
+            <span class="rag-badge">RAG Pipeline</span>
+        </div>
+        <div class="rag-description">
+            Ask questions about {{ fundamentals.name }}'s annual reports, earnings call transcripts, and research reports.
+        </div>
+
+        {# Document list area #}
+        <div class="rag-docs-panel" id="ragDocsPanel">
+            <div class="rag-docs-loading">Loading documents…</div>
+        </div>
+
+        {# Upload form (admin only — shown via JS if user is staff) #}
+        {% if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser) %}
+        <details class="rag-upload-panel" id="ragUploadPanel">
+            <summary class="rag-upload-toggle">📤 Upload Document (Admin)</summary>
+            <div class="rag-upload-form">
+                <div class="rag-form-row">
+                    <input type="text" id="ragDocTitle" placeholder="Document title (e.g. Q2 FY2025 Earnings Call)" class="rag-input">
+                    <select id="ragDocType" class="rag-select">
+                        <option value="annual_report">Annual Report</option>
+                        <option value="earnings_call" selected>Earnings Call</option>
+                        <option value="investor_presentation">Investor Presentation</option>
+                        <option value="research_report">Research Report</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <input type="text" id="ragFiscalYear" placeholder="FY2025 / Q2-2025" class="rag-input" style="max-width:140px;">
+                </div>
+                <div class="rag-form-row" style="margin-top:10px;">
+                    <input type="file" id="ragFileInput" accept=".pdf" class="rag-file-input">
+                    <button class="rag-upload-btn" id="ragUploadBtn" onclick="uploadRagDocument()">
+                        📤 Upload & Index PDF
+                    </button>
+                </div>
+                <div id="ragUploadStatus" style="margin-top:8px;font-size:0.82rem;"></div>
+            </div>
+        </details>
+        {% endif %}
+
+        {# Chat Interface #}
+        <div class="rag-chat-container" id="ragChatContainer">
+            <div class="rag-chat-messages" id="ragMessages">
+                <div class="rag-welcome-message">
+                    <div class="rag-welcome-icon">💬</div>
+                    <div>
+                        <div style="font-weight:700;margin-bottom:4px;">Chat with {{ symbol }} Documents</div>
+                        <div style="font-size:0.82rem;color:var(--text-secondary);">Ask anything about earnings calls, annual reports, or investor presentations.</div>
+                        <div class="rag-example-questions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
+                            <button class="rag-example-btn" onclick="askRagExample(this)">What are the key revenue drivers?</button>
+                            <button class="rag-example-btn" onclick="askRagExample(this)">What did management say about expansion plans?</button>
+                            <button class="rag-example-btn" onclick="askRagExample(this)">What are the main risks highlighted?</button>
+                            <button class="rag-example-btn" onclick="askRagExample(this)">What is the dividend policy?</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="rag-chat-input-row">
+                <input type="text" id="ragQuestion" class="rag-question-input"
+                       placeholder="Ask a question about the company's documents…"
+                       onkeydown="if(event.key==='Enter') sendRagQuery()">
+                <select id="ragFilterType" class="rag-filter-select">
+                    <option value="">All Documents</option>
+                    <option value="annual_report">Annual Report</option>
+                    <option value="earnings_call">Earnings Call</option>
+                    <option value="investor_presentation">Investor Pres.</option>
+                    <option value="research_report">Research Report</option>
+                </select>
+                <button class="rag-send-btn" id="ragSendBtn" onclick="sendRagQuery()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
@@ -783,6 +998,192 @@ function toggleDescription() {
         desc.classList.add('expanded');
         btn.textContent = 'Read less ▲';
     }
+}
+
+// ============================================================
+// AI Research Summary — Async Load
+// ============================================================
+(async function loadAISummary() {
+    const loading = document.getElementById('aiSummaryLoading');
+    const result  = document.getElementById('aiSummaryResult');
+    const errDiv  = document.getElementById('aiSummaryError');
+    const footer  = document.getElementById('aiSummaryFooter');
+
+    try {
+        const resp = await fetch(`/en/api/ai/stock-summary/${encodeURIComponent(SYMBOL)}/`);
+        const data = await resp.json();
+
+        if (!data.success || (!data.overview && !data.bullish_summary && !data.risk_summary)) {
+            errDiv.textContent = '⚠ AI analysis unavailable — check that your GROQ_API_KEY or GEMINI_API_KEY is configured.';
+            errDiv.style.display = 'block';
+            loading.style.display = 'none';
+            return;
+        }
+
+        document.getElementById('aiOverview').textContent = data.overview || '—';
+        document.getElementById('aiBullish').innerHTML   = (data.bullish_summary || '').replace(/✅/g, '<span class="ai-bullet">✅</span>').replace(/\n/g, '<br>');
+        document.getElementById('aiRisks').innerHTML     = (data.risk_summary   || '').replace(/⚠️/g, '<span class="ai-bullet">⚠️</span>').replace(/\n/g, '<br>');
+        footer.innerHTML = data.cached
+            ? '🕒 Cached result · refreshes every 6 hours'
+            : '✨ Live AI analysis · ' + new Date().toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
+
+        loading.style.display = 'none';
+        result.style.display  = 'block';
+    } catch(e) {
+        errDiv.textContent = '⚠ Could not load AI summary.';
+        errDiv.style.display = 'block';
+        loading.style.display = 'none';
+        console.error('[AI Summary]', e);
+    }
+})();
+
+// ============================================================
+// RAG — Load Document List
+// ============================================================
+(async function loadRagDocuments() {
+    const panel = document.getElementById('ragDocsPanel');
+    try {
+        const resp = await fetch(`/en/api/ai/rag/documents/${encodeURIComponent(SYMBOL)}/`);
+        const data = await resp.json();
+        if (data.success && data.documents && data.documents.length > 0) {
+            panel.innerHTML = `
+                <div class="rag-docs-header">📚 ${data.documents.length} Indexed Document(s)</div>
+                <div class="rag-docs-list">
+                    ${data.documents.map(d => `
+                        <div class="rag-doc-item ${d.is_indexed ? 'indexed' : 'pending'}">
+                            <span class="rag-doc-type-badge">${d.document_type_display}</span>
+                            <span class="rag-doc-title">${d.title}</span>
+                            ${d.fiscal_year ? `<span class="rag-doc-fy">${d.fiscal_year}</span>` : ''}
+                            <span class="rag-doc-meta">${d.chunk_count} chunks · ${d.uploaded_at}</span>
+                        </div>
+                    `).join('')}
+                </div>`;
+        } else {
+            panel.innerHTML = `<div class="rag-no-docs">📭 No documents uploaded yet. ${document.getElementById('ragUploadPanel') ? 'Use the Upload section above to add documents.' : 'Ask your admin to upload documents for this stock.'}</div>`;
+        }
+    } catch(e) {
+        panel.innerHTML = '<div class="rag-no-docs">Could not load document list.</div>';
+    }
+})();
+
+// ============================================================
+// RAG — Send Query
+// ============================================================
+async function sendRagQuery() {
+    const input   = document.getElementById('ragQuestion');
+    const btn     = document.getElementById('ragSendBtn');
+    const msgs    = document.getElementById('ragMessages');
+    const filter  = document.getElementById('ragFilterType').value;
+    const question = input.value.trim();
+
+    if (!question) return;
+
+    // Add user message bubble
+    const userBubble = document.createElement('div');
+    userBubble.className = 'rag-msg user-msg';
+    userBubble.textContent = question;
+    msgs.appendChild(userBubble);
+
+    // Add loading bubble
+    const loadBubble = document.createElement('div');
+    loadBubble.className = 'rag-msg ai-msg rag-thinking';
+    loadBubble.innerHTML = '<div class="rag-dots"><span></span><span></span><span></span></div>';
+    msgs.appendChild(loadBubble);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    input.value = '';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch(`/en/api/ai/rag/query/${encodeURIComponent(SYMBOL)}/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({question, doc_type: filter || null}),
+        });
+        const data = await resp.json();
+        loadBubble.remove();
+
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'rag-msg ai-msg';
+
+        if (data.success) {
+            let html = `<div class="rag-answer">${data.answer.replace(/\n/g, '<br>')}</div>`;
+            if (data.sources && data.sources.length) {
+                html += `<div class="rag-sources">📎 Sources: ${data.sources.map(s => `<em>${s.title}</em>`).join(', ')}</div>`;
+            }
+            aiBubble.innerHTML = html;
+        } else {
+            aiBubble.innerHTML = `<span style="color:#ef4444;">⚠ ${data.error}</span>`;
+        }
+        msgs.appendChild(aiBubble);
+        msgs.scrollTop = msgs.scrollHeight;
+    } catch(e) {
+        loadBubble.remove();
+        const errBubble = document.createElement('div');
+        errBubble.className = 'rag-msg ai-msg';
+        errBubble.innerHTML = '<span style="color:#ef4444;">⚠ Network error. Please try again.</span>';
+        msgs.appendChild(errBubble);
+    } finally {
+        btn.disabled = false;
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+}
+
+function askRagExample(btn) {
+    const input = document.getElementById('ragQuestion');
+    input.value = btn.textContent;
+    sendRagQuery();
+}
+
+// ============================================================
+// RAG — Upload Document (Admin)
+// ============================================================
+async function uploadRagDocument() {
+    const fileInput = document.getElementById('ragFileInput');
+    const title     = document.getElementById('ragDocTitle').value.trim();
+    const docType   = document.getElementById('ragDocType').value;
+    const fy        = document.getElementById('ragFiscalYear').value.trim();
+    const statusDiv = document.getElementById('ragUploadStatus');
+    const btn       = document.getElementById('ragUploadBtn');
+
+    if (!fileInput.files[0]) {
+        statusDiv.innerHTML = '<span style="color:#f97316;">Please select a PDF file.</span>';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('title', title || fileInput.files[0].name.replace('.pdf',''));
+    formData.append('document_type', docType);
+    formData.append('fiscal_year', fy);
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+
+    btn.disabled = true;
+    statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Uploading and indexing PDF…</span>';
+
+    try {
+        const resp = await fetch(`/en/api/ai/rag/upload/${encodeURIComponent(SYMBOL)}/`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+        if (data.success) {
+            statusDiv.innerHTML = `<span style="color:#16a34a;">✅ ${data.message} Reload to see in document list.</span>`;
+            // Refresh docs panel
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusDiv.innerHTML = `<span style="color:#ef4444;">❌ ${data.error}</span>`;
+        }
+    } catch(e) {
+        statusDiv.innerHTML = '<span style="color:#ef4444;">❌ Upload failed. Check network.</span>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.trim().split('=')[1] : '';
 }
 </script>
 {% endblock %}

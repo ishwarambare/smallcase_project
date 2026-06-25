@@ -723,3 +723,113 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
         "bullish_reasons": bullish_reasons,
         "bearish_reasons": bearish_reasons,
     }
+
+
+# ---------------------------------------------------------------------------
+# 8. Advanced Quant Metrics (Sharpe, Sortino, ADV, PCR, IV)
+# ---------------------------------------------------------------------------
+def get_quant_metrics(symbol: str) -> dict:
+    """
+    Compute professional-grade quant metrics:
+      - Sharpe Ratio (1-year daily returns vs risk-free rate)
+      - Sortino Ratio (1-year downside deviation)
+      - Average Daily Volume – 30 day (liquidity check)
+      - Put/Call Ratio (options market sentiment)
+      - Implied Volatility – near ATM option
+    """
+    result = {
+        "sharpe_ratio": None,
+        "sharpe_signal": "neutral",
+        "sortino_ratio": None,
+        "sortino_signal": "neutral",
+        "adv_30": None,
+        "adv_signal": "neutral",
+        "put_call_ratio": None,
+        "pcr_signal": "neutral",
+        "implied_volatility": None,
+        "iv_signal": "neutral",
+        "error": None,
+    }
+    try:
+        import numpy as np
+        ticker = yf.Ticker(symbol)
+
+        # --- Sharpe & Sortino from 1-year daily returns ---
+        df = yf.download(symbol, period="1y", auto_adjust=True, progress=False)
+        close = _get_close_series(df)
+        if len(close) >= 60:
+            daily_ret = close.pct_change().dropna()
+            ann_ret = float(daily_ret.mean()) * 252
+            ann_std = float(daily_ret.std()) * (252 ** 0.5)
+            risk_free = 0.065  # RBI repo rate proxy (~6.5%)
+
+            # Sharpe
+            if ann_std > 0:
+                sharpe = round((ann_ret - risk_free) / ann_std, 2)
+                result["sharpe_ratio"] = sharpe
+                result["sharpe_signal"] = "bullish" if sharpe > 1.0 else ("bearish" if sharpe < 0 else "neutral")
+
+            # Sortino — only downside deviation
+            downside = daily_ret[daily_ret < 0]
+            downside_std = float(downside.std()) * (252 ** 0.5) if len(downside) > 5 else 0
+            if downside_std > 0:
+                sortino = round((ann_ret - risk_free) / downside_std, 2)
+                result["sortino_ratio"] = sortino
+                result["sortino_signal"] = "bullish" if sortino > 1.5 else ("bearish" if sortino < 0 else "neutral")
+
+            # ADV-30
+            try:
+                if isinstance(df.columns, pd.MultiIndex):
+                    vol_cols = [c for c in df.columns if c[0] == "Volume"]
+                    vol = df[vol_cols[0]].dropna() if vol_cols else pd.Series(dtype=float)
+                else:
+                    vol = df["Volume"].dropna() if "Volume" in df.columns else pd.Series(dtype=float)
+                if len(vol) >= 30:
+                    adv30 = int(vol.iloc[-30:].mean())
+                    result["adv_30"] = adv30
+                    # Liquidity thresholds: >500K = good, <100K = illiquid
+                    result["adv_signal"] = "bullish" if adv30 >= 500_000 else ("bearish" if adv30 < 100_000 else "neutral")
+            except Exception:
+                pass
+
+        # --- Put/Call Ratio and IV from options chain ---
+        try:
+            expirations = ticker.options
+            if expirations:
+                # Use nearest expiry
+                near_exp = expirations[0]
+                chain = ticker.option_chain(near_exp)
+                calls = chain.calls
+                puts = chain.puts
+
+                # PCR by open interest
+                total_call_oi = calls["openInterest"].fillna(0).sum()
+                total_put_oi  = puts["openInterest"].fillna(0).sum()
+                if total_call_oi > 0:
+                    pcr = round(total_put_oi / total_call_oi, 2)
+                    result["put_call_ratio"] = pcr
+                    # PCR > 1.2 → bearish, < 0.7 → bullish, middle = neutral
+                    result["pcr_signal"] = "bearish" if pcr > 1.2 else ("bullish" if pcr < 0.7 else "neutral")
+
+                # Near ATM IV from calls
+                try:
+                    cur_price = float(_get_close_series(df).iloc[-1]) if not close.empty else None
+                    if cur_price:
+                        calls_sorted = calls.copy()
+                        calls_sorted["dist"] = (calls_sorted["strike"] - cur_price).abs()
+                        atm_row = calls_sorted.nsmallest(1, "dist")
+                        iv_val = atm_row["impliedVolatility"].values[0] if not atm_row.empty else None
+                        if iv_val and not math.isnan(iv_val):
+                            result["implied_volatility"] = round(float(iv_val) * 100, 1)
+                            # IV > 40% = high uncertainty; < 20% = stable
+                            result["iv_signal"] = "bearish" if result["implied_volatility"] > 40 else ("bullish" if result["implied_volatility"] < 20 else "neutral")
+                except Exception:
+                    pass
+        except Exception as opt_err:
+            print(f"[QuantMetrics] Options error for {symbol}: {opt_err}")
+
+    except Exception as e:
+        result["error"] = str(e)
+        print(f"[QuantMetrics] Error for {symbol}: {e}")
+
+    return result

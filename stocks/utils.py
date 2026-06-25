@@ -27,7 +27,7 @@ INDIAN_STOCKS = {
     'HCLTECH.NS': 'HCL Technologies',
     'ULTRACEMCO.NS': 'UltraTech Cement',
     'CGPOWER.NS': 'CG Power & Industrial Solutions',
-    'AUROPHARM.NS': 'Aurobindo Pharma',
+    'AUROPHARMA.NS': 'Aurobindo Pharma',
     'CAMS.NS': 'CAMS',
     'CDSL.NS': 'CDSL',
     'CHALET.NS': 'Chalet Hotels',

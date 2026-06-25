@@ -44,7 +44,19 @@ urlpatterns = [
     
     # AI Chat API
     path('api/ai/chat/', views.ai_chat, name='ai_chat'),
-    
+
+    # AI Stock Intelligence APIs (async — called after page load)
+    path('api/ai/stock-summary/<str:symbol>/', views.ai_stock_summary, name='ai_stock_summary'),
+    path('api/ai/news-sentiment/<str:symbol>/', views.ai_news_sentiment, name='ai_news_sentiment'),
+
+    # Autonomous Portfolio Agent
+    path('api/ai/portfolio-agent/<int:basket_id>/', views.portfolio_agent_run, name='portfolio_agent_run'),
+
+    # Financial Document RAG — "Chat with a Stock"
+    path('api/ai/rag/upload/<str:symbol>/', views.rag_upload_document, name='rag_upload_document'),
+    path('api/ai/rag/query/<str:symbol>/', views.rag_query_document, name='rag_query_document'),
+    path('api/ai/rag/documents/<str:symbol>/', views.rag_list_documents, name='rag_list_documents'),
+
     # Tiny URL for basket sharing
     path('basket/<int:basket_id>/share/', views.create_tiny_url, name='create_tiny_url'),
     path('s/<str:short_code>/', views.redirect_tiny_url, name='redirect_tiny_url'),

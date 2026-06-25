@@ -149,12 +149,52 @@ CHANNEL_LAYERS = {
 
 import dj_database_url
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+
+def _get_database_config():
+    sqlite_db_name = str(BASE_DIR / 'smallcasedb')
+    default_db_url = f'sqlite:///{sqlite_db_name}'
+    database_url = os.environ.get('DATABASE_URL', '').strip()
+
+    if not database_url:
+        return dj_database_url.config(
+            default=default_db_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+
+    parsed = dj_database_url.parse(database_url)
+    if parsed.get('ENGINE') == 'django.db.backends.postgresql':
+        try:
+            import psycopg2
+
+            conn = psycopg2.connect(
+                dbname=parsed.get('NAME'),
+                user=parsed.get('USER'),
+                password=parsed.get('PASSWORD'),
+                host=parsed.get('HOST'),
+                port=parsed.get('PORT'),
+            )
+            conn.close()
+            return dj_database_url.config(
+                default=database_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        except Exception:
+            return {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': sqlite_db_name,
+            }
+
+    return dj_database_url.config(
+        default=database_url or default_db_url,
         conn_max_age=600,
         conn_health_checks=True,
     )
+
+
+DATABASES = {
+    'default': _get_database_config()
 }
 
 

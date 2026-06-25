@@ -149,7 +149,7 @@ class GeminiProvider(AIProvider):
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not set")
         genai.configure(api_key=api_key)
-        model_name = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
+        model_name = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
         self.model = genai.GenerativeModel(model_name)
     
     def generate_response(self, user_message: str, context: dict) -> str:
@@ -345,3 +345,276 @@ What would you like to know?"""
 
 # Singleton instance
 ai_service = AIService()
+
+
+# ============================================================
+# Stock Analysis AI Service — Separate from chat AI
+# ============================================================
+
+class StockAnalysisAIService:
+    """
+    LLM-powered service for:
+      1. Generating a 3-paragraph fundamental summary (Overview / Bullish / Risks)
+      2. Enhancing news sentiment with LLM classification
+      3. Synthesizing portfolio rebalancing recommendations
+    Uses the same AI_PROVIDER env setting as the chat service.
+    Results are cached in Django's cache for 6 hours.
+    """
+
+    CACHE_TTL = 6 * 60 * 60  # 6 hours
+
+    def _call_llm(self, prompt: str, max_tokens: int = 800) -> str | None:
+        """Internal helper — calls the configured LLM provider."""
+        provider_name = os.environ.get('AI_PROVIDER', 'groq').lower()
+        try:
+            if provider_name == 'gemini':
+                import google.generativeai as genai
+                api_key = os.environ.get('GEMINI_API_KEY', '')
+                if not api_key:
+                    return None
+                genai.configure(api_key=api_key)
+                model_name = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+                model = genai.GenerativeModel(model_name)
+                resp = model.generate_content(
+                    prompt,
+                    generation_config={"temperature": 0.4, "max_output_tokens": max_tokens}
+                )
+                return resp.text.strip()
+            else:  # groq default
+                from groq import Groq
+                api_key = os.environ.get('GROQ_API_KEY', '')
+                if not api_key:
+                    return None
+                client = Groq(api_key=api_key)
+                model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+                resp = client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model=model,
+                    temperature=0.4,
+                    max_tokens=max_tokens,
+                )
+                return resp.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[StockAnalysisAI] LLM call error: {e}")
+            return None
+
+    def generate_fundamental_summary(self, symbol: str, fundamentals: dict,
+                                     indicators: dict, recommendation: dict) -> dict:
+        """
+        Calls LLM to produce a structured 3-section summary for a stock.
+        Returns dict with keys: overview, bullish_summary, risk_summary, cached
+        """
+        from django.core.cache import cache
+        cache_key = f'ai_fund_summary_{symbol}'
+        cached = cache.get(cache_key)
+        if cached:
+            cached['cached'] = True
+            return cached
+
+        # Build a compact data block for the LLM
+        price   = fundamentals.get('current_price', 'N/A')
+        pe      = fundamentals.get('pe_ratio', 'N/A')
+        fwd_pe  = fundamentals.get('forward_pe', 'N/A')
+        mcap    = fundamentals.get('market_cap', 'N/A')
+        beta    = fundamentals.get('beta', 'N/A')
+        div_y   = fundamentals.get('dividend_yield', 'N/A')
+        pb      = fundamentals.get('price_to_book', 'N/A')
+        eps     = fundamentals.get('eps', 'N/A')
+        sector  = fundamentals.get('sector', 'N/A')
+        desc    = (fundamentals.get('description') or '')[:500]
+        verdict = recommendation.get('verdict', 'HOLD')
+        score   = recommendation.get('score', 0)
+        bull_r  = '; '.join(recommendation.get('bullish_reasons', [])[:5])
+        bear_r  = '; '.join(recommendation.get('bearish_reasons', [])[:5])
+        rsi     = indicators.get('rsi', 'N/A')
+        sma50s  = indicators.get('sma50_signal', 'N/A')
+        macds   = indicators.get('macd_signal', 'N/A')
+
+        prompt = f"""You are a senior equity research analyst. Analyze {symbol} ({fundamentals.get('name', symbol)}) 
+and write a concise, factual 3-section report. Use data provided — do NOT make up numbers.
+
+STOCK DATA:
+- Sector: {sector}
+- Price: ₹{price} | P/E: {pe} | Fwd P/E: {fwd_pe} | P/B: {pb}
+- Market Cap: {mcap} | EPS: {eps} | Dividend Yield: {div_y} | Beta: {beta}
+- RSI: {rsi} | SMA50 trend: {sma50s} | MACD: {macds}
+- AI Score: {score}/17 → Verdict: {verdict}
+- Bullish signals: {bull_r}
+- Risk signals: {bear_r}
+- Business: {desc}
+
+Write EXACTLY 3 sections with these headings (use ## heading syntax):
+## Business Overview
+(2-3 sentences summarizing the company's core business and competitive position)
+
+## Bullish Signals
+(3-4 bullet points starting with ✅ highlighting the strongest reasons to be optimistic)
+
+## Key Risks
+(3-4 bullet points starting with ⚠️ highlighting the main risks an investor should watch)
+
+Keep each section concise. Use ₹ for prices. Be factual and balanced."""
+
+        raw = self._call_llm(prompt, max_tokens=600)
+        if not raw:
+            return {"overview": None, "bullish_summary": None, "risk_summary": None, "cached": False}
+
+        # Parse sections
+        result = {"overview": "", "bullish_summary": "", "risk_summary": "", "cached": False}
+        current = None
+        lines = raw.split('\n')
+        for line in lines:
+            line_strip = line.strip()
+            if '## Business Overview' in line_strip:
+                current = 'overview'
+            elif '## Bullish Signals' in line_strip:
+                current = 'bullish_summary'
+            elif '## Key Risks' in line_strip:
+                current = 'risk_summary'
+            elif current and line_strip:
+                result[current] = result[current] + line_strip + '\n'
+
+        # Trim whitespace
+        for k in ['overview', 'bullish_summary', 'risk_summary']:
+            result[k] = result[k].strip()
+
+        cache.set(cache_key, result, self.CACHE_TTL)
+        return result
+
+    def enhance_news_sentiment(self, symbol: str, articles: list) -> list:
+        """
+        Sends news titles to LLM for accurate sentiment classification.
+        Returns articles list with 'llm_sentiment' and 'llm_reason' added.
+        Results cached per symbol for 3 hours.
+        """
+        from django.core.cache import cache
+        cache_key = f'ai_news_sentiment_{symbol}'
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
+        if not articles:
+            return articles
+
+        # Build compact list of titles + summaries
+        news_block = "\n".join(
+            f"{i+1}. TITLE: {a.get('title', '')[:120]}"
+            for i, a in enumerate(articles[:10])
+        )
+
+        prompt = f"""You are a financial news analyst specializing in Indian equities.
+Classify each news headline about {symbol} into EXACTLY one of: Positive, Negative, or Neutral.
+For each, also give a 5-word reason.
+
+Headlines:
+{news_block}
+
+Respond ONLY with a JSON array like:
+[
+  {{"id": 1, "sentiment": "Positive", "reason": "Strong revenue beat surprise"}},
+  {{"id": 2, "sentiment": "Negative", "reason": "Probe reduces investor confidence"}},
+  ...
+]
+Output ONLY the JSON array. No extra text."""
+
+        raw = self._call_llm(prompt, max_tokens=400)
+        if not raw:
+            return articles
+
+        try:
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\[.*\]', raw, re.DOTALL)
+            if not json_match:
+                return articles
+            classifications = json.loads(json_match.group())
+            cls_map = {item['id']: item for item in classifications}
+
+            enhanced = []
+            for i, article in enumerate(articles):
+                cls = cls_map.get(i + 1, {})
+                article = dict(article)
+                article['llm_sentiment'] = cls.get('sentiment', '').lower() or article.get('sentiment', 'neutral')
+                article['llm_reason'] = cls.get('reason', '')
+                enhanced.append(article)
+
+            cache.set(cache_key, enhanced, 3 * 60 * 60)
+            return enhanced
+        except Exception as e:
+            print(f"[StockAnalysisAI] News enhance parse error: {e}")
+            return articles
+
+    def generate_portfolio_agent_report(self, basket_name: str, stocks_analysis: list,
+                                         total_investment: float, total_value: float) -> dict:
+        """
+        Autonomous Portfolio Agent — synthesizes multi-stock analysis
+        into a cohesive rebalancing recommendation report.
+        """
+        from django.core.cache import cache
+        cache_key = f'ai_agent_report_{basket_name}_{int(total_investment)}'
+        cached = cache.get(cache_key)
+        if cached:
+            cached['cached'] = True
+            return cached
+
+        # Build compact analysis per stock
+        stock_summaries = []
+        for sa in stocks_analysis:
+            s = sa.get('symbol', '?')
+            rec = sa.get('recommendation', {})
+            fund = sa.get('fundamentals', {})
+            stock_summaries.append(
+                f"- {s}: Score {rec.get('score', 0)}/17 ({rec.get('verdict', 'N/A')}), "
+                f"P/E={fund.get('pe_ratio', 'N/A')}, "
+                f"RSI={sa.get('indicators', {}).get('rsi', 'N/A')}, "
+                f"Bullish: {'; '.join(rec.get('bullish_reasons', [])[:2])}, "
+                f"Risks: {'; '.join(rec.get('bearish_reasons', [])[:2])}"
+            )
+
+        pnl = total_value - total_investment
+        pnl_pct = (pnl / total_investment * 100) if total_investment > 0 else 0
+        stocks_block = '\n'.join(stock_summaries)
+
+        prompt = f"""You are an autonomous AI portfolio manager for an Indian retail investor.
+
+PORTFOLIO: {basket_name}
+Total Investment: ₹{total_investment:,.0f}
+Current Value: ₹{total_value:,.0f}
+Profit/Loss: ₹{pnl:,.0f} ({pnl_pct:.1f}%)
+
+INDIVIDUAL STOCK ANALYSIS:
+{stocks_block}
+
+Generate a comprehensive portfolio intelligence report with these EXACT sections:
+
+## Portfolio Health Score
+Give an overall score out of 10 and 2-sentence assessment.
+
+## Top Actions
+List 3-5 specific action items starting with 🔴 REDUCE, 🟡 HOLD, or 🟢 ADD for each relevant stock with reasoning.
+
+## Risk Alerts
+List 2-3 key portfolio-level risks to watch.
+
+## Rebalancing Suggestion
+One paragraph on how to rebalance for better risk-adjusted returns.
+
+## Market Timing
+One sentence on whether now is a good time to add to this basket given current signals.
+
+Be specific, use stock symbols, be direct. Use ₹ for prices."""
+
+        raw = self._call_llm(prompt, max_tokens=800)
+        if not raw:
+            return {
+                "report": None, "cached": False,
+                "error": "AI provider unavailable. Check API key configuration."
+            }
+
+        result = {"report": raw, "cached": False, "error": None}
+        cache.set(cache_key, result, 2 * 60 * 60)  # 2-hour cache for agent
+        return result
+
+
+# Singleton instance for stock analysis AI
+stock_ai_service = StockAnalysisAIService()

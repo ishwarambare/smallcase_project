@@ -84,12 +84,12 @@ def home(request):
 
 def stock_detail(request, symbol):
     """Stock detail page — full intelligence: fundamentals, technicals, news,
-    ownership, policy alignment, global impact, and unified recommendation."""
+    ownership, policy alignment, global impact, quant metrics, and unified recommendation."""
     from .stock_analysis import (
         get_stock_fundamentals, get_technical_indicators,
         get_news_sentiment, get_ownership_analysis,
         get_policy_alignment, get_global_impact,
-        get_buy_recommendation,
+        get_buy_recommendation, get_quant_metrics,
     )
 
     db_stock = Stock.objects.filter(symbol=symbol).first()
@@ -109,6 +109,7 @@ def stock_detail(request, symbol):
                            fundamentals.get('sector', ''),
                            news.get('articles', []))
         global_data  = get_global_impact(fundamentals.get('sector', ''))
+        quant        = get_quant_metrics(symbol)
         recommendation = get_buy_recommendation(
                            fundamentals, indicators,
                            news=news, ownership=ownership,
@@ -144,6 +145,7 @@ def stock_detail(request, symbol):
             'ownership': ownership,
             'policy': policy,
             'global_data': global_data,
+            'quant': quant,
             'recommendation': recommendation,
             'day_change': day_change,
             'day_change_pct': day_change_pct,
@@ -1717,3 +1719,262 @@ def tiny_url_stats(request, short_code):
         'is_active': tiny_url.is_active,
         'is_expired': tiny_url.is_expired()
     })
+
+
+# ============================================================
+# AI Stock Summary API (async — loaded after page render)
+# ============================================================
+
+def ai_stock_summary(request, symbol):
+    """
+    Async endpoint: returns LLM-generated 3-section fundamental summary.
+    Called by JS after stock_detail page renders to avoid slowing initial load.
+    """
+    from django.core.cache import cache
+    from .ai_service import stock_ai_service
+
+    # Reuse cached stock data from stock_detail view
+    cache_key = f'stock_detail_v2_{symbol}'
+    cached_ctx = cache.get(cache_key)
+
+    if not cached_ctx:
+        # Fetch minimal data if not cached yet
+        from .stock_analysis import get_stock_fundamentals, get_technical_indicators, get_buy_recommendation, get_news_sentiment, get_ownership_analysis, get_policy_alignment, get_global_impact
+        fundamentals = get_stock_fundamentals(symbol)
+        indicators   = get_technical_indicators(symbol)
+        news         = get_news_sentiment(symbol)
+        ownership    = get_ownership_analysis(fundamentals)
+        policy       = get_policy_alignment(fundamentals.get('sector', ''), news.get('articles', []))
+        global_data  = get_global_impact(fundamentals.get('sector', ''))
+        recommendation = get_buy_recommendation(fundamentals, indicators, news=news, ownership=ownership, policy=policy, global_impact=global_data)
+    else:
+        fundamentals   = cached_ctx.get('fundamentals', {})
+        indicators     = cached_ctx.get('indicators', {})
+        recommendation = cached_ctx.get('recommendation', {})
+
+    summary = stock_ai_service.generate_fundamental_summary(
+        symbol=symbol,
+        fundamentals=fundamentals,
+        indicators=indicators,
+        recommendation=recommendation,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'overview': summary.get('overview'),
+        'bullish_summary': summary.get('bullish_summary'),
+        'risk_summary': summary.get('risk_summary'),
+        'cached': summary.get('cached', False),
+    })
+
+
+# ============================================================
+# AI News Sentiment Enhancement API
+# ============================================================
+
+def ai_news_sentiment(request, symbol):
+    """
+    Returns LLM-enhanced sentiment for each news article of a stock.
+    """
+    from django.core.cache import cache
+    from .ai_service import stock_ai_service
+
+    cache_key = f'stock_detail_v2_{symbol}'
+    cached_ctx = cache.get(cache_key)
+    articles = cached_ctx.get('news', {}).get('articles', []) if cached_ctx else []
+
+    if not articles:
+        from .stock_analysis import get_news_sentiment
+        news = get_news_sentiment(symbol)
+        articles = news.get('articles', [])
+
+    enhanced = stock_ai_service.enhance_news_sentiment(symbol, articles)
+    return JsonResponse({'success': True, 'articles': enhanced})
+
+
+# ============================================================
+# Autonomous Portfolio Agent API
+# ============================================================
+
+@ajax_login_required
+def portfolio_agent_run(request, basket_id):
+    """
+    POST: Triggers the autonomous portfolio agent for a basket.
+    Returns the full analysis + LLM-generated rebalancing report as JSON.
+    Can take 30-120s for large baskets (runs stock analysis in parallel threads).
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    from .portfolio_agent import portfolio_agent
+
+    try:
+        result = portfolio_agent.run(basket_id=basket_id, user=request.user)
+        if result.get('error') and not result.get('report'):
+            return JsonResponse({'success': False, 'error': result['error']})
+
+        return JsonResponse({
+            'success': True,
+            'basket_name': result.get('basket_name'),
+            'total_investment': result.get('total_investment'),
+            'total_value': result.get('total_value'),
+            'pnl': result.get('pnl'),
+            'pnl_pct': result.get('pnl_pct'),
+            'report': result.get('report'),
+            'cached': result.get('cached', False),
+            'stocks_count': len(result.get('stocks_analysis', [])),
+            'stocks_analysis': [
+                {
+                    'symbol': s.get('symbol'),
+                    'verdict': s.get('recommendation', {}).get('verdict'),
+                    'score': s.get('recommendation', {}).get('score'),
+                    'sharpe': s.get('quant', {}).get('sharpe_ratio'),
+                }
+                for s in result.get('stocks_analysis', [])
+            ],
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+# ============================================================
+# RAG Document Upload API
+# ============================================================
+
+@ajax_login_required
+def rag_upload_document(request, symbol):
+    """
+    POST: Upload a PDF document for a stock (admin-only by default, but can
+    be opened to all users by removing the staff check below).
+    Kicks off async indexing via RAG pipeline.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    # Admin-only upload restriction
+    if not request.user.is_staff and not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Staff access required to upload documents'}, status=403)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'success': False, 'error': 'No file uploaded'})
+
+    if not uploaded_file.name.lower().endswith('.pdf'):
+        return JsonResponse({'success': False, 'error': 'Only PDF files are supported'})
+
+    title = request.POST.get('title', uploaded_file.name.replace('.pdf', ''))
+    doc_type = request.POST.get('document_type', 'other')
+    fiscal_year = request.POST.get('fiscal_year', '')
+
+    db_stock = Stock.objects.filter(symbol=symbol).first()
+    if not db_stock:
+        return JsonResponse({'success': False, 'error': f'Stock {symbol} not found in database'})
+
+    from .models import StockDocument
+    from .rag_service import rag_service
+
+    # Save to DB
+    doc = StockDocument.objects.create(
+        stock=db_stock,
+        title=title,
+        document_type=doc_type,
+        file=uploaded_file,
+        uploaded_by=request.user,
+        fiscal_year=fiscal_year,
+        is_indexed=False,
+    )
+
+    # Index synchronously (for small PDFs this is fast; large PDFs may take ~10s)
+    result = rag_service.ingest_document(
+        symbol=symbol,
+        document_id=doc.id,
+        file_path=doc.file.path,
+        doc_title=title,
+        doc_type=doc_type,
+    )
+
+    if result['success']:
+        return JsonResponse({
+            'success': True,
+            'document_id': doc.id,
+            'title': doc.title,
+            'chunk_count': result['chunk_count'],
+            'message': f"Document indexed successfully with {result['chunk_count']} chunks.",
+        })
+    else:
+        doc.delete()  # Clean up on failure
+        return JsonResponse({'success': False, 'error': result.get('error', 'Indexing failed')})
+
+
+# ============================================================
+# RAG Query API — "Chat with a Stock"
+# ============================================================
+
+@ajax_login_required
+def rag_query_document(request, symbol):
+    """
+    POST: Query indexed documents for a stock using natural language.
+    Body: {'question': 'What did management say about expansion?', 'doc_type': 'earnings_call'}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    import json as json_lib
+    try:
+        body = json_lib.loads(request.body)
+    except Exception:
+        body = request.POST
+
+    question = body.get('question', '').strip()
+    doc_type  = body.get('doc_type', None) or None
+
+    if not question:
+        return JsonResponse({'success': False, 'error': 'Question is required'})
+    if len(question) > 500:
+        return JsonResponse({'success': False, 'error': 'Question too long (max 500 chars)'})
+
+    from .rag_service import rag_service
+
+    result = rag_service.query(symbol=symbol, question=question, doc_type=doc_type)
+
+    if result.get('error'):
+        return JsonResponse({'success': False, 'error': result['error']})
+
+    return JsonResponse({
+        'success': True,
+        'answer': result.get('answer'),
+        'sources': result.get('sources', []),
+    })
+
+
+# ============================================================
+# RAG Document List API
+# ============================================================
+
+def rag_list_documents(request, symbol):
+    """
+    GET: Returns list of indexed documents for a stock.
+    Public endpoint — no auth required to view what docs are available.
+    """
+    from .rag_service import rag_service
+    from .models import StockDocument
+
+    try:
+        docs = StockDocument.objects.filter(stock__symbol=symbol).order_by('-uploaded_at')
+        doc_list = [
+            {
+                'id': d.id,
+                'title': d.title,
+                'document_type': d.document_type,
+                'document_type_display': d.get_document_type_display(),
+                'fiscal_year': d.fiscal_year,
+                'is_indexed': d.is_indexed,
+                'chunk_count': d.chunk_count,
+                'uploaded_at': d.uploaded_at.strftime('%d %b %Y'),
+            }
+            for d in docs
+        ]
+        return JsonResponse({'success': True, 'documents': doc_list, 'symbol': symbol})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

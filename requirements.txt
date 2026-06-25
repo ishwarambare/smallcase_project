@@ -78,3 +78,7 @@ pyotp
 twilio
 django-otp
 qrcode
+
+# AI Engineering — Financial Document RAG Pipeline
+pypdf>=4.0.0          # Pure-Python PDF text extraction
+chromadb>=0.4.0       # Local file-based vector database for RAG

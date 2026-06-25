@@ -541,3 +541,214 @@ h1 {
         overflow-x: auto;
     }
 }
+
+/* ==========================================
+   AI Portfolio Agent Panel
+   ========================================== */
+
+@keyframes agentPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.3); opacity: 0.6; }
+}
+
+@keyframes agentSpin {
+    to { transform: rotate(360deg); }
+}
+
+.ai-agent-panel {
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 28px 32px;
+    margin-top: 28px;
+    border-left: 4px solid #8b5cf6;
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.ai-agent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.ai-agent-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.ai-agent-icon {
+    font-size: 2rem;
+    background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(99,102,241,0.1));
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ai-agent-run-btn {
+    padding: 11px 24px;
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba(139,92,246,0.35);
+    letter-spacing: 0.02em;
+}
+.ai-agent-run-btn:hover  { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(139,92,246,0.45); }
+.ai-agent-run-btn:active { transform: translateY(0); }
+.ai-agent-run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.agent-status-idle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.agent-running {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(99,102,241,0.04));
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 10px;
+    font-size: 0.85rem;
+}
+
+.agent-pulse {
+    width: 14px; height: 14px;
+    background: #8b5cf6;
+    border-radius: 50%;
+    animation: agentPulse 1.2s infinite;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.agent-success {
+    padding: 10px 14px;
+    background: rgba(22,163,74,0.08);
+    border: 1px solid rgba(22,163,74,0.2);
+    border-radius: 8px;
+    color: #16a34a;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.agent-error {
+    padding: 10px 14px;
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 8px;
+    color: #dc2626;
+    font-size: 0.85rem;
+}
+
+/* Stock verdict cards */
+.agent-stocks-grid {
+    margin-top: 16px;
+}
+
+.agent-stocks-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+}
+
+.agent-stocks-cards {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.agent-stock-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-width: 110px;
+    text-align: center;
+}
+
+.agent-stock-symbol  { font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.04em; margin-bottom: 4px; }
+.agent-stock-verdict { font-size: 0.8rem; font-weight: 800; }
+.agent-stock-score   { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+.agent-stock-sharpe  { font-size: 0.7rem; color: var(--text-secondary); }
+
+/* View report button */
+.agent-view-report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: opacity 0.2s, transform 0.15s;
+}
+.agent-view-report-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+
+/* Agent report modal */
+.agent-modal-content {
+    max-width: 760px;
+    width: 95%;
+}
+
+.agent-report-meta {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    padding: 10px 0 14px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 14px;
+}
+
+.agent-report-content {
+    font-size: 0.88rem;
+    line-height: 1.75;
+    color: var(--text-primary);
+}
+
+.agent-report-heading {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 18px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.agent-action {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 6px 0;
+    font-size: 0.84rem;
+}
+
+.agent-action.reduce  { background: rgba(239,68,68,0.07);  border-left: 3px solid #ef4444; }
+.agent-action.hold    { background: rgba(234,179,8,0.07);  border-left: 3px solid #eab308; }
+.agent-action.add     { background: rgba(22,163,74,0.07);  border-left: 3px solid #16a34a; }

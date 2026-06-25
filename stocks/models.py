@@ -269,3 +269,59 @@ class TinyURL(models.Model):
             models.Index(fields=['short_code']),
             models.Index(fields=['-created_at']),
         ]
+
+
+# ==========================================
+# Financial Document RAG (Retrieval-Augmented Generation)
+# ==========================================
+
+class StockDocument(models.Model):
+    """
+    Model to store uploaded financial documents (PDFs) for RAG querying.
+    Users/admins upload earnings call transcripts, annual reports, etc.
+    The rag_service.py pipeline indexes these into ChromaDB.
+    """
+    DOCUMENT_TYPE_CHOICES = [
+        ('annual_report', 'Annual Report'),
+        ('earnings_call', 'Earnings Call Transcript'),
+        ('investor_presentation', 'Investor Presentation'),
+        ('research_report', 'Research Report'),
+        ('other', 'Other'),
+    ]
+
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+        related_name='documents',
+        db_index=True,
+    )
+    title = models.CharField(max_length=300)
+    document_type = models.CharField(
+        max_length=30,
+        choices=DOCUMENT_TYPE_CHOICES,
+        default='other',
+        db_index=True,
+    )
+    file = models.FileField(upload_to='stock_documents/%Y/%m/')
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_documents',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_indexed = models.BooleanField(default=False, db_index=True)
+    chunk_count = models.IntegerField(default=0)
+    fiscal_year = models.CharField(max_length=10, blank=True, help_text="e.g. FY2025 or Q2-2025")
+    notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"{self.stock.symbol} — {self.title} ({self.get_document_type_display()})"
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['stock', 'document_type']),
+            models.Index(fields=['is_indexed']),
+        ]

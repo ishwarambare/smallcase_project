@@ -56,6 +56,8 @@ urlpatterns = [
     path('api/ai/rag/upload/<str:symbol>/', views.rag_upload_document, name='rag_upload_document'),
     path('api/ai/rag/query/<str:symbol>/', views.rag_query_document, name='rag_query_document'),
     path('api/ai/rag/documents/<str:symbol>/', views.rag_list_documents, name='rag_list_documents'),
+    path('api/ai/rag/reindex/<str:symbol>/', views.rag_reindex_documents, name='rag_reindex_documents'),
+    path('api/ai/rag/delete/<str:symbol>/<int:doc_id>/', views.rag_delete_document, name='rag_delete_document'),
 
     # Tiny URL for basket sharing
     path('basket/<int:basket_id>/share/', views.create_tiny_url, name='create_tiny_url'),

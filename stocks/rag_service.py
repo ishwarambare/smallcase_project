@@ -108,6 +108,21 @@ def _extract_pdf_text(file_path: str) -> str:
         raise
 
 
+def _collection_exists(client, collection_name: str) -> bool:
+    """Check if a ChromaDB collection exists (compatible with v1.x)."""
+    try:
+        # chromadb v1.x: list_collections() returns list of Collection objects
+        collections = client.list_collections()
+        # Handle both string names (older API) and Collection objects (newer API)
+        for c in collections:
+            name = c if isinstance(c, str) else getattr(c, 'name', str(c))
+            if name == collection_name:
+                return True
+        return False
+    except Exception:
+        return False
+
+
 class RAGService:
     """
     Manages the ingestion and querying of financial documents.
@@ -123,6 +138,10 @@ class RAGService:
         Returns: {'success': bool, 'chunk_count': int, 'error': str|None}
         """
         try:
+            # Validate file exists
+            if not os.path.exists(file_path):
+                return {'success': False, 'chunk_count': 0, 'error': f'File not found: {file_path}'}
+
             text = _extract_pdf_text(file_path)
             if not text.strip():
                 return {'success': False, 'chunk_count': 0, 'error': 'No text found in PDF'}
@@ -143,8 +162,8 @@ class RAGService:
             else:
                 collection = client.get_or_create_collection(name=collection_name)
 
-            # Add chunks with metadata
-            ids       = [f"doc{document_id}_chunk{i}" for i in range(len(chunks))]
+            # Build IDs and metadata
+            ids = [f"doc{document_id}_chunk{i}" for i in range(len(chunks))]
             metadatas = [
                 {
                     'doc_id': str(document_id),
@@ -156,19 +175,29 @@ class RAGService:
                 for i in range(len(chunks))
             ]
 
-            # Delete old chunks for this document first (idempotent re-index)
+            # Delete old chunks for this document (idempotent re-index)
             try:
-                existing = collection.get(
-                    where={"doc_id": str(document_id)}
-                )
-                if existing['ids']:
+                existing = collection.get(where={"doc_id": str(document_id)})
+                if existing and existing.get('ids'):
                     collection.delete(ids=existing['ids'])
-            except Exception:
-                pass
+            except Exception as del_err:
+                logger.debug(f"[RAG] Could not delete old chunks (ok on first index): {del_err}")
 
-            collection.add(documents=chunks, ids=ids, metadatas=metadatas)
+            # Add chunks in batches to avoid memory issues with large PDFs
+            BATCH_SIZE = 50
+            for batch_start in range(0, len(chunks), BATCH_SIZE):
+                batch_end = min(batch_start + BATCH_SIZE, len(chunks))
+                collection.add(
+                    documents=chunks[batch_start:batch_end],
+                    ids=ids[batch_start:batch_end],
+                    metadatas=metadatas[batch_start:batch_end],
+                )
 
-            # Update DB model
+            # Verify chunks were actually stored
+            actual_count = collection.count()
+            logger.info(f"[RAG] Collection '{collection_name}' now has {actual_count} total chunks")
+
+            # Update DB model to mark as indexed
             try:
                 from .models import StockDocument
                 doc = StockDocument.objects.get(id=document_id)
@@ -182,20 +211,70 @@ class RAGService:
             return {'success': True, 'chunk_count': len(chunks), 'error': None}
 
         except Exception as e:
-            logger.error(f"[RAG] Ingest error for {symbol}: {e}")
+            logger.error(f"[RAG] Ingest error for {symbol}: {e}", exc_info=True)
             return {'success': False, 'chunk_count': 0, 'error': str(e)}
+
+    def reindex_symbol(self, symbol: str) -> dict:
+        """
+        Re-indexes ALL documents for a symbol from their saved files.
+        Useful when ChromaDB data is lost but DB records remain.
+        Returns: {'success': bool, 'indexed': int, 'errors': list}
+        """
+        from .models import StockDocument
+        docs = StockDocument.objects.filter(stock__symbol=symbol)
+        indexed = 0
+        errors = []
+        for doc in docs:
+            try:
+                file_path = doc.file.path
+                result = self.ingest_document(
+                    symbol=symbol,
+                    document_id=doc.id,
+                    file_path=file_path,
+                    doc_title=doc.title,
+                    doc_type=doc.document_type,
+                )
+                if result['success']:
+                    indexed += 1
+                else:
+                    errors.append(f"Doc {doc.id} ({doc.title}): {result['error']}")
+            except Exception as e:
+                errors.append(f"Doc {doc.id} ({doc.title}): {str(e)}")
+        return {'success': len(errors) == 0, 'indexed': indexed, 'errors': errors}
 
     def query(self, symbol: str, question: str, doc_type: str = None) -> dict:
         """
         Retrieves top-K chunks for the question and calls LLM to answer.
+        Auto-reindexes from DB if ChromaDB collection is missing.
         Returns: {'answer': str, 'sources': list, 'error': str|None}
         """
         try:
+            from .models import StockDocument
+
             client = _get_chroma_client()
             emb_fn = _get_embedding_fn()
             collection_name = f"rag_{_clean_symbol(symbol)}"
 
-            # Check collection exists
+            # --- Auto-reindex if collection is missing but DB has docs ---
+            if not _collection_exists(client, collection_name):
+                db_docs = StockDocument.objects.filter(stock__symbol=symbol)
+                if not db_docs.exists():
+                    return {
+                        'answer': None,
+                        'sources': [],
+                        'error': f'No documents found for {symbol}. Please upload documents first.'
+                    }
+                # Try to auto-reindex
+                logger.info(f"[RAG] Collection missing for {symbol}, auto-reindexing...")
+                reindex_result = self.reindex_symbol(symbol)
+                if reindex_result['indexed'] == 0:
+                    return {
+                        'answer': None,
+                        'sources': [],
+                        'error': f'Documents exist but could not be indexed. Please re-upload. Errors: {"; ".join(reindex_result["errors"][:2])}'
+                    }
+
+            # Get collection
             try:
                 if emb_fn:
                     collection = client.get_collection(
@@ -204,24 +283,36 @@ class RAGService:
                     )
                 else:
                     collection = client.get_collection(name=collection_name)
-            except Exception:
+            except Exception as e:
+                return {
+                    'answer': None,
+                    'sources': [],
+                    'error': f'Could not load document index for {symbol}: {str(e)}'
+                }
+
+            total_count = collection.count()
+            if total_count == 0:
                 return {
                     'answer': None,
                     'sources': [],
                     'error': f'No documents indexed for {symbol}. Please upload documents first.'
                 }
 
-            # Build where filter
+            # Build where filter (only apply if doc_type is given AND count > 0)
             where = None
             if doc_type:
                 where = {"doc_type": doc_type}
 
             # Retrieve top chunks
-            results = collection.query(
-                query_texts=[question],
-                n_results=min(TOP_K, collection.count()),
-                where=where,
-            )
+            n_results = min(TOP_K, total_count)
+            query_kwargs = {
+                'query_texts': [question],
+                'n_results': n_results,
+            }
+            if where:
+                query_kwargs['where'] = where
+
+            results = collection.query(**query_kwargs)
 
             if not results or not results['documents'] or not results['documents'][0]:
                 return {
@@ -257,7 +348,7 @@ class RAGService:
             return {'answer': answer, 'sources': unique_sources, 'error': None}
 
         except Exception as e:
-            logger.error(f"[RAG] Query error for {symbol}: {e}")
+            logger.error(f"[RAG] Query error for {symbol}: {e}", exc_info=True)
             return {'answer': None, 'sources': [], 'error': str(e)}
 
     def _answer_with_llm(self, symbol: str, question: str, context: str) -> str:
@@ -281,12 +372,13 @@ Provide a concise, factual answer based on the documents. Mention the source doc
         return answer or "I'm unable to generate a response right now. Please try again."
 
     def list_documents(self, symbol: str) -> list:
-        """Returns list of indexed documents for a symbol from the DB."""
+        """Returns list of all documents for a symbol from the DB (indexed or not)."""
         try:
             from .models import StockDocument
+            # Show ALL documents (not just is_indexed=True) so users see pending ones too
             docs = StockDocument.objects.filter(
-                stock__symbol=symbol, is_indexed=True
-            ).values('id', 'title', 'document_type', 'uploaded_at', 'chunk_count')
+                stock__symbol=symbol
+            ).values('id', 'title', 'document_type', 'uploaded_at', 'chunk_count', 'is_indexed')
             return list(docs)
         except Exception:
             return []

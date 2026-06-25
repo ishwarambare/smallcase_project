@@ -325,3 +325,29 @@ class StockDocument(models.Model):
             models.Index(fields=['stock', 'document_type']),
             models.Index(fields=['is_indexed']),
         ]
+
+
+class DocumentChunk(models.Model):
+    """
+    Model to store text chunks and their embeddings for StockDocuments.
+    Used for RAG (Retrieval-Augmented Generation) query matching.
+    """
+    document = models.ForeignKey(
+        StockDocument,
+        on_delete=models.CASCADE,
+        related_name='chunks',
+        db_index=True,
+    )
+    chunk_index = models.IntegerField()
+    content = models.TextField()
+    embedding = models.JSONField(help_text="Embedding vector as a list of floats")
+
+    class Meta:
+        ordering = ['chunk_index']
+        unique_together = ['document', 'chunk_index']
+        indexes = [
+            models.Index(fields=['document']),
+        ]
+
+    def __str__(self):
+        return f"Chunk {self.chunk_index} of {self.document.title}"

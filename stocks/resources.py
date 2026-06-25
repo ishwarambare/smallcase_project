@@ -2,7 +2,10 @@
 
 from import_export import resources, fields, widgets
 from import_export.widgets import ForeignKeyWidget, DecimalWidget
-from .models import Stock, Basket, BasketItem, ChatGroup, ChatGroupMember, ChatMessage, TinyURL
+from .models import (
+    Stock, Basket, BasketItem, ChatGroup, ChatGroupMember,
+    ChatMessage, TinyURL, StockDocument
+)
 from django.contrib.auth import get_user_model
 import yfinance as yf
 from decimal import Decimal
@@ -220,5 +223,35 @@ class TinyURLResource(resources.ModelResource):
         export_order = ('id', 'short_code', 'original_url', 'basket', 'created_by',
                         'click_count', 'is_active', 'created_at', 'expires_at')
         import_id_fields = ['short_code']
+        skip_unchanged = True
+        report_skipped = True
+
+
+class StockDocumentResource(resources.ModelResource):
+    """
+    Resource class for StockDocument model with import/export functionality.
+    """
+    stock = fields.Field(
+        column_name='stock',
+        attribute='stock',
+        widget=ForeignKeyWidget(Stock, field='symbol')
+    )
+    uploaded_by = fields.Field(
+        column_name='uploaded_by',
+        attribute='uploaded_by',
+        widget=ForeignKeyWidget(User, field='email')
+    )
+
+    class Meta:
+        model = StockDocument
+        fields = (
+            'id', 'stock', 'title', 'document_type', 'file', 'uploaded_by',
+            'uploaded_at', 'is_indexed', 'chunk_count', 'fiscal_year', 'notes'
+        )
+        export_order = (
+            'id', 'stock', 'title', 'document_type', 'file', 'uploaded_by',
+            'uploaded_at', 'is_indexed', 'chunk_count', 'fiscal_year', 'notes'
+        )
+        import_id_fields = ['id']
         skip_unchanged = True
         report_skipped = True

@@ -719,7 +719,7 @@
 
         {# Upload form (admin only — shown via JS if user is staff) #}
         {% if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser) %}
-        <details class="rag-upload-panel" id="ragUploadPanel">
+        <details open class="rag-upload-panel" id="ragUploadPanel">
             <summary class="rag-upload-toggle">📤 Upload Document (Admin)</summary>
             <div class="rag-upload-form">
                 <div class="rag-form-row">
@@ -733,13 +733,34 @@
                     </select>
                     <input type="text" id="ragFiscalYear" placeholder="FY2025 / Q2-2025" class="rag-input" style="max-width:140px;">
                 </div>
-                <div class="rag-form-row" style="margin-top:10px;">
-                    <input type="file" id="ragFileInput" accept=".pdf" class="rag-file-input">
-                    <button class="rag-upload-btn" id="ragUploadBtn" onclick="uploadRagDocument()">
-                        📤 Upload & Index PDF
-                    </button>
+                <div class="rag-form-row" style="margin-top:10px; display:block;">
+                    {# Drag and drop zone #}
+                    <div id="ragDropZone" style="border: 2px dashed var(--border-color, #cbd5e1); border-radius: 8px; padding: 20px; text-align: center; background: rgba(59, 130, 246, 0.03); cursor: pointer; transition: all 0.2s ease; margin-bottom: 12px;" 
+                         ondragover="event.preventDefault(); this.style.borderColor='var(--primary-color, #3b82f6)';" 
+                         ondragleave="this.style.borderColor='var(--border-color, #cbd5e1)';" 
+                         ondrop="handleRagDrop(event); this.style.borderColor='var(--border-color, #cbd5e1)';">
+                        <div style="font-size: 1.5rem; margin-bottom: 8px;">📂</div>
+                        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">Drag & Drop PDF here or Click to Browse</div>
+                        <div style="font-size: 0.78rem; color: var(--text-secondary, #64748b);">Only PDF files up to 20MB are supported</div>
+                        <input type="file" id="ragFileInput" accept=".pdf" class="rag-file-input" style="display: none;" onchange="handleFileSelect(this);">
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <button class="rag-upload-btn" id="ragUploadBtn" onclick="uploadRagDocument()">
+                            📤 Upload & Index PDF
+                        </button>
+                        <button class="rag-upload-btn" id="ragReindexBtn" onclick="reindexDocuments()" style="background:var(--warning,#f59e0b);" title="Re-index all documents from saved files (fixes lost ChromaDB data)">
+                            🔄 Re-index All
+                        </button>
+                    </div>
                 </div>
-                <div id="ragUploadStatus" style="margin-top:8px;font-size:0.82rem;"></div>
+                
+                {# Upload Progress Bar #}
+                <div id="ragUploadProgressContainer" style="display: none; width: 100%; height: 6px; background: rgba(59, 130, 246, 0.1); border-radius: 3px; margin-top: 10px; overflow: hidden;">
+                    <div id="ragUploadProgressBar" style="width: 0%; height: 100%; background: var(--primary-color, #3b82f6); transition: width 0.3s ease;"></div>
+                </div>
+                
+                <div id="ragUploadStatus" style="margin-top:8px;font-size:0.82rem;font-weight:500;"></div>
             </div>
         </details>
         {% endif %}
@@ -1040,31 +1061,117 @@ function toggleDescription() {
 // ============================================================
 // RAG — Load Document List
 // ============================================================
-(async function loadRagDocuments() {
+// ============================================================
+// Drag & Drop / File Select Handlers for RAG
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    const dropZone = document.getElementById('ragDropZone');
+    if (dropZone) {
+        dropZone.addEventListener('click', () => {
+            document.getElementById('ragFileInput').click();
+        });
+    }
+    // Load documents list on page ready
+    loadRagDocuments();
+});
+
+function handleFileSelect(input) {
+    if (input.files && input.files[0]) {
+        updateDropZoneWithFile(input.files[0]);
+    }
+}
+
+function handleRagDrop(event) {
+    event.preventDefault();
+    const files = event.dataTransfer.files;
+    if (files && files[0]) {
+        const file = files[0];
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+            const input = document.getElementById('ragFileInput');
+            // Assign files to input element
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            input.files = dataTransfer.files;
+            updateDropZoneWithFile(file);
+        } else {
+            alert('Only PDF files are supported.');
+        }
+    }
+}
+
+function updateDropZoneWithFile(file) {
+    const dropZone = document.getElementById('ragDropZone');
+    if (dropZone && file) {
+        dropZone.innerHTML = `
+            <div style="font-size: 1.5rem; margin-bottom: 8px;">📄</div>
+            <div style="font-weight: 600; font-size: 0.9rem; color: #16a34a; margin-bottom: 4px;">Selected: ${file.name}</div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary, #64748b);">${(file.size / (1024 * 1024)).toFixed(2)} MB</div>
+            <div style="font-size: 0.75rem; color: var(--primary-color, #3b82f6); margin-top: 4px; text-decoration: underline;">Click to change file</div>
+        `;
+        // Auto-fill title if empty
+        const titleInput = document.getElementById('ragDocTitle');
+        if (titleInput && !titleInput.value.trim()) {
+            titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+        }
+    }
+}
+
+// ============================================================
+// RAG — Load Document List
+// ============================================================
+async function loadRagDocuments() {
     const panel = document.getElementById('ragDocsPanel');
     try {
         const resp = await fetch(`/en/api/ai/rag/documents/${encodeURIComponent(SYMBOL)}/`);
         const data = await resp.json();
+        const isAdmin = !!document.getElementById('ragUploadPanel');
+        
         if (data.success && data.documents && data.documents.length > 0) {
+            const indexedCount = data.documents.filter(d => d.is_indexed).length;
+            const pendingCount = data.documents.length - indexedCount;
+            const headerLabel = indexedCount > 0
+                ? `📚 ${indexedCount} Indexed Document(s)${pendingCount > 0 ? ` <span style="color:#f59e0b;font-size:0.78rem;">· ${pendingCount} pending</span>` : ''}`
+                : `⚠️ ${pendingCount} Document(s) — Not yet indexed`;
+            
             panel.innerHTML = `
-                <div class="rag-docs-header">📚 ${data.documents.length} Indexed Document(s)</div>
-                <div class="rag-docs-list">
+                <div class="rag-docs-header">${headerLabel}</div>
+                <div class="rag-docs-list" style="display:flex; flex-direction:column; gap:8px;">
                     ${data.documents.map(d => `
-                        <div class="rag-doc-item ${d.is_indexed ? 'indexed' : 'pending'}">
-                            <span class="rag-doc-type-badge">${d.document_type_display}</span>
-                            <span class="rag-doc-title">${d.title}</span>
-                            ${d.fiscal_year ? `<span class="rag-doc-fy">${d.fiscal_year}</span>` : ''}
-                            <span class="rag-doc-meta">${d.chunk_count} chunks · ${d.uploaded_at}</span>
+                        <div class="rag-doc-item ${d.is_indexed ? 'indexed' : 'pending'}" style="display:flex; align-items:center; width:100%; justify-content:space-between; padding:10px 14px; border-radius:6px; background:var(--background-secondary, rgba(255,255,255,0.05)); border:1px solid var(--border-color, rgba(0,0,0,0.1));">
+                            <div style="display:flex; flex-direction:column; gap:4px; flex-grow:1;">
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span class="rag-doc-type-badge">${d.document_type_display || d.document_type}</span>
+                                    <span class="rag-doc-title" style="font-weight:600;">${d.title}</span>
+                                    ${d.fiscal_year ? `<span class="rag-doc-fy" style="font-size:0.75rem; background:rgba(59,130,246,0.1); color:#3b82f6; padding:2px 6px; border-radius:4px;">${d.fiscal_year}</span>` : ''}
+                                </div>
+                                <div style="font-size:0.75rem; color:var(--text-secondary);">
+                                    ${d.chunk_count} chunks · ${d.uploaded_at}
+                                    ${!d.is_indexed ? `<span style="color:#f59e0b;font-weight:600;margin-left:6px;">⚠ Not indexed</span>` : ''}
+                                </div>
+                            </div>
+                            
+                            ${isAdmin ? `
+                                <button class="rag-doc-delete-btn" onclick="deleteRagDocument(${d.id}, '${d.title.replace(/'/g, "\\'")}')" 
+                                        style="background:transparent; border:none; cursor:pointer; font-size:1.1rem; color:#ef4444; padding:6px; border-radius:6px; transition:all 0.2s;" 
+                                        title="Delete document" 
+                                        onmouseover="this.style.background='rgba(239, 68, 68, 0.1)'" 
+                                        onmouseout="this.style.background='transparent'">
+                                    🗑️
+                                </button>
+                            ` : ''}
                         </div>
                     `).join('')}
-                </div>`;
+                </div>
+                ${pendingCount > 0 && isAdmin ? `<div style="margin-top:8px;font-size:0.8rem;color:#f59e0b;">💡 Click "🔄 Re-index All" above to index pending documents.</div>` : ''}
+            `;
         } else {
-            panel.innerHTML = `<div class="rag-no-docs">📭 No documents uploaded yet. ${document.getElementById('ragUploadPanel') ? 'Use the Upload section above to add documents.' : 'Ask your admin to upload documents for this stock.'}</div>`;
+            panel.innerHTML = `<div class="rag-no-docs">📭 No documents uploaded yet. ${isAdmin ? 'Use the Upload section above to add documents.' : 'Ask your admin to upload documents for this stock.'}</div>`;
         }
     } catch(e) {
         panel.innerHTML = '<div class="rag-no-docs">Could not load document list.</div>';
+        console.error(e);
     }
-})();
+}
 
 // ============================================================
 // RAG — Send Query
@@ -1138,6 +1245,9 @@ function askRagExample(btn) {
 // ============================================================
 // RAG — Upload Document (Admin)
 // ============================================================
+// ============================================================
+// RAG — Upload Document (Admin)
+// ============================================================
 async function uploadRagDocument() {
     const fileInput = document.getElementById('ragFileInput');
     const title     = document.getElementById('ragDocTitle').value.trim();
@@ -1145,6 +1255,8 @@ async function uploadRagDocument() {
     const fy        = document.getElementById('ragFiscalYear').value.trim();
     const statusDiv = document.getElementById('ragUploadStatus');
     const btn       = document.getElementById('ragUploadBtn');
+    const progressContainer = document.getElementById('ragUploadProgressContainer');
+    const progressBar = document.getElementById('ragUploadProgressBar');
 
     if (!fileInput.files[0]) {
         statusDiv.innerHTML = '<span style="color:#f97316;">Please select a PDF file.</span>';
@@ -1159,25 +1271,129 @@ async function uploadRagDocument() {
     formData.append('csrfmiddlewaretoken', getCsrfToken());
 
     btn.disabled = true;
-    statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Uploading and indexing PDF…</span>';
+    statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Uploading PDF…</span>';
+    
+    // Show progress bar
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/en/api/ai/rag/upload/${encodeURIComponent(SYMBOL)}/`, true);
+    
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            if (progressBar) progressBar.style.width = percentComplete + '%';
+            if (percentComplete >= 99) {
+                statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Indexing document chunks...</span>';
+            } else {
+                statusDiv.innerHTML = `<span style="color:var(--text-secondary);">⏳ Uploading PDF (${Math.round(percentComplete)}%)…</span>`;
+            }
+        }
+    };
+
+    xhr.onload = function() {
+        btn.disabled = false;
+        if (progressContainer) progressContainer.style.display = 'none';
+        
+        try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status === 200 && data.success) {
+                statusDiv.innerHTML = `<span style="color:#16a34a;font-weight:600;">✅ ${data.message}</span>`;
+                // Reset drop zone back to default state
+                const dropZone = document.getElementById('ragDropZone');
+                if (dropZone) {
+                    dropZone.innerHTML = `
+                        <div style="font-size: 1.5rem; margin-bottom: 8px;">📂</div>
+                        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">Drag & Drop PDF here or Click to Browse</div>
+                        <div style="font-size: 0.78rem; color: var(--text-secondary, #64748b);">Only PDF files up to 20MB are supported</div>
+                        <input type="file" id="ragFileInput" accept=".pdf" class="rag-file-input" style="display: none;" onchange="handleFileSelect(this);">
+                    `;
+                }
+                document.getElementById('ragDocTitle').value = '';
+                document.getElementById('ragFiscalYear').value = '';
+                
+                // Refresh the document list without full page reload
+                loadRagDocuments();
+                setTimeout(() => { statusDiv.innerHTML = ''; }, 3000);
+            } else {
+                statusDiv.innerHTML = `<span style="color:#ef4444;">❌ ${data.error || 'Upload failed.'}</span>`;
+            }
+        } catch(e) {
+            statusDiv.innerHTML = '<span style="color:#ef4444;">❌ Parsing response failed.</span>';
+        }
+    };
+
+    xhr.onerror = function() {
+        btn.disabled = false;
+        if (progressContainer) progressContainer.style.display = 'none';
+        statusDiv.innerHTML = '<span style="color:#ef4444;">❌ Upload failed due to network error.</span>';
+    };
+
+    xhr.send(formData);
+}
+
+// ============================================================
+// RAG — Re-index All Documents (Admin)
+// ============================================================
+async function reindexDocuments() {
+    const statusDiv = document.getElementById('ragUploadStatus');
+    const btn       = document.getElementById('ragReindexBtn');
+    if (!btn) return;
+
+    if (!confirm('Re-index all documents for this stock? This may take a moment.')) return;
+
+    btn.disabled = true;
+    statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Re-indexing all documents…</span>';
 
     try {
-        const resp = await fetch(`/en/api/ai/rag/upload/${encodeURIComponent(SYMBOL)}/`, {
+        const resp = await fetch(`/en/api/ai/rag/reindex/${encodeURIComponent(SYMBOL)}/`, {
             method: 'POST',
-            body: formData,
+            headers: {'X-CSRFToken': getCsrfToken()},
         });
         const data = await resp.json();
         if (data.success) {
-            statusDiv.innerHTML = `<span style="color:#16a34a;">✅ ${data.message} Reload to see in document list.</span>`;
-            // Refresh docs panel
-            setTimeout(() => location.reload(), 2000);
+            statusDiv.innerHTML = `<span style="color:#16a34a;">✅ ${data.message}</span>`;
+            loadRagDocuments();
+            setTimeout(() => { statusDiv.innerHTML = ''; }, 3000);
         } else {
-            statusDiv.innerHTML = `<span style="color:#ef4444;">❌ ${data.error}</span>`;
+            statusDiv.innerHTML = `<span style="color:#ef4444;">❌ ${data.message}</span>`;
         }
     } catch(e) {
-        statusDiv.innerHTML = '<span style="color:#ef4444;">❌ Upload failed. Check network.</span>';
+        statusDiv.innerHTML = '<span style="color:#ef4444;">❌ Re-index request failed. Check network.</span>';
     } finally {
         btn.disabled = false;
+    }
+}
+
+// ============================================================
+// RAG — Delete Document (Admin)
+// ============================================================
+async function deleteRagDocument(docId, title) {
+    if (!confirm(`Are you sure you want to delete "${title}"? This will permanently delete the document and all its chunks.`)) return;
+    
+    const statusDiv = document.getElementById('ragUploadStatus');
+    if (statusDiv) statusDiv.innerHTML = '<span style="color:var(--text-secondary);">⏳ Deleting document…</span>';
+    
+    try {
+        const resp = await fetch(`/en/api/ai/rag/delete/${encodeURIComponent(SYMBOL)}/${docId}/`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': getCsrfToken()},
+        });
+        const data = await resp.json();
+        if (data.success) {
+            if (statusDiv) statusDiv.innerHTML = `<span style="color:#16a34a;">✅ ${data.message}</span>`;
+            loadRagDocuments();
+            setTimeout(() => { if (statusDiv) statusDiv.innerHTML = ''; }, 3000);
+        } else {
+            alert(`Error: ${data.error}`);
+            if (statusDiv) statusDiv.innerHTML = '';
+        }
+    } catch(e) {
+        alert('Delete request failed.');
+        if (statusDiv) statusDiv.innerHTML = '';
     }
 }
 

@@ -7,11 +7,11 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from import_export.admin import ImportExportModelAdmin, ExportActionMixin
 from import_export.formats.base_formats import CSV, XLSX, JSON, HTML, DEFAULT_FORMATS
-from .models import Stock, Basket, BasketItem
+from .models import Stock, Basket, BasketItem, StockDocument, DocumentChunk
 from .resources import (
     StockResource, BasketResource, BasketItemResource,
     ChatGroupResource, ChatGroupMemberResource, ChatMessageResource,
-    TinyURLResource
+    TinyURLResource, StockDocumentResource
 )
 import pandas as pd
 import yfinance as yf
@@ -250,6 +250,40 @@ class BasketItemAdmin(ImportExportModelAdmin):
     list_display = ['basket', 'stock', 'weight_percentage', 'allocated_amount', 'quantity', 'purchase_price']
     list_filter = ['basket', 'purchase_date']
     search_fields = ['basket__name', 'stock__symbol']
+
+@admin.register(StockDocument)
+class StockDocumentAdmin(ImportExportModelAdmin):
+    resource_class = StockDocumentResource
+    list_display = ['stock', 'document_type', 'file_name', 'uploaded_at']
+    list_filter = ['document_type', 'uploaded_at']
+    search_fields = ['stock__symbol', 'title', 'document_type', 'notes']
+
+    def file_name(self, obj):
+        if obj.file:
+            return obj.file.name.split('/')[-1]
+        return '-'
+
+    file_name.short_description = 'File Name'
+
+
+@admin.register(DocumentChunk)
+class DocumentChunkAdmin(admin.ModelAdmin):
+    list_display = ['document', 'chunk_index', 'get_short_content', 'get_embedding_length']
+    list_filter = ['document__stock', 'document__document_type']
+    search_fields = ['content', 'document__title']
+    ordering = ['document', 'chunk_index']
+
+    def get_short_content(self, obj):
+        return obj.content[:100] + '...' if len(obj.content) > 100 else obj.content
+    get_short_content.short_description = 'Content Excerpt'
+
+    def get_embedding_length(self, obj):
+        if obj.embedding:
+            return len(obj.embedding)
+        return 0
+    get_embedding_length.short_description = 'Embedding Dimension'
+
+
 
 
 # ==========================================

@@ -1872,7 +1872,7 @@ def rag_upload_document(request, symbol):
         return JsonResponse({'success': False, 'error': f'Stock {symbol} not found in database'})
 
     from .models import StockDocument
-    from .rag_service import rag_service
+    from .pgvector_rag_service import pgvector_rag_service as rag_service
 
     # Save to DB
     doc = StockDocument.objects.create(
@@ -1934,7 +1934,7 @@ def rag_query_document(request, symbol):
     if len(question) > 500:
         return JsonResponse({'success': False, 'error': 'Question too long (max 500 chars)'})
 
-    from .rag_service import rag_service
+    from .pgvector_rag_service import pgvector_rag_service as rag_service
 
     result = rag_service.query(symbol=symbol, question=question, doc_type=doc_type)
 
@@ -1949,6 +1949,35 @@ def rag_query_document(request, symbol):
 
 
 # ============================================================
+# RAG Re-index API (admin) — fixes ChromaDB data loss
+# ============================================================
+
+@ajax_login_required
+def rag_reindex_documents(request, symbol):
+    """
+    POST: Force re-index all documents for a stock from their saved PDF files.
+    Admin-only. Useful when ChromaDB data is lost but DB records remain.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    if not request.user.is_staff and not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Staff access required'}, status=403)
+
+    from .pgvector_rag_service import pgvector_rag_service as rag_service
+    result = rag_service.reindex_symbol(symbol=symbol)
+
+    return JsonResponse({
+        'success': result['success'],
+        'indexed': result['indexed'],
+        'errors': result['errors'],
+        'message': f"Re-indexed {result['indexed']} document(s) for {symbol}." + (
+            f" Errors: {'; '.join(result['errors'][:3])}" if result['errors'] else ""
+        ),
+    })
+
+
+# ============================================================
 # RAG Document List API
 # ============================================================
 
@@ -1957,7 +1986,7 @@ def rag_list_documents(request, symbol):
     GET: Returns list of indexed documents for a stock.
     Public endpoint — no auth required to view what docs are available.
     """
-    from .rag_service import rag_service
+    from .pgvector_rag_service import pgvector_rag_service as rag_service
     from .models import StockDocument
 
     try:
@@ -1978,3 +2007,37 @@ def rag_list_documents(request, symbol):
         return JsonResponse({'success': True, 'documents': doc_list, 'symbol': symbol})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+@ajax_login_required
+def rag_delete_document(request, symbol, doc_id):
+    """
+    POST: Delete an uploaded financial document.
+    Admin-only.
+    """
+    import os
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    if not request.user.is_staff and not request.user.is_superuser:
+        return JsonResponse({'success': False, 'error': 'Staff access required'}, status=403)
+
+    from .models import StockDocument
+    doc = get_object_or_404(StockDocument, id=doc_id, stock__symbol=symbol)
+    
+    title = doc.title
+    
+    # Delete file if exists
+    if doc.file and os.path.exists(doc.file.path):
+        try:
+            os.remove(doc.file.path)
+        except Exception as e:
+            logger.warning(f"Could not delete document file: {e}")
+            
+    doc.delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': f"Document '{title}' deleted successfully."
+    })
+

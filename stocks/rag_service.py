@@ -90,11 +90,11 @@ def _chunk_text(text: str) -> list[str]:
     return [c for c in chunks if len(c) > 50]  # discard tiny chunks
 
 
-def _extract_pdf_text(file_path: str) -> str:
-    """Extract plain text from a PDF file using pypdf."""
+def _extract_pdf_text(file_source) -> str:
+    """Extract plain text from a PDF file (path or file-like stream) using pypdf."""
     try:
         from pypdf import PdfReader
-        reader = PdfReader(file_path)
+        reader = PdfReader(file_source)
         pages = []
         for page in reader.pages:
             text = page.extract_text()
@@ -129,8 +129,8 @@ class RAGService:
     """
 
     def ingest_document(self, symbol: str, document_id: int,
-                        file_path: str, doc_title: str,
-                        doc_type: str = 'other') -> dict:
+                         file_path: str, doc_title: str,
+                         doc_type: str = 'other') -> dict:
         """
         Extracts text from a PDF, chunks it, embeds and stores in ChromaDB.
         Updates the StockDocument.is_indexed and .chunk_count fields.
@@ -138,11 +138,32 @@ class RAGService:
         Returns: {'success': bool, 'chunk_count': int, 'error': str|None}
         """
         try:
-            # Validate file exists
-            if not os.path.exists(file_path):
-                return {'success': False, 'chunk_count': 0, 'error': f'File not found: {file_path}'}
+            # Retrieve the document and load file content from storage
+            doc = None
+            try:
+                from .models import StockDocument
+                doc = StockDocument.objects.get(id=document_id)
+            except StockDocument.DoesNotExist:
+                pass
 
-            text = _extract_pdf_text(file_path)
+            import io
+            if doc and doc.file:
+                try:
+                    with doc.file.open('rb') as f:
+                        pdf_source = io.BytesIO(f.read())
+                except Exception as e:
+                    logger.warning(f"[RAG] Failed to open file from storage for doc {document_id}, trying file_path: {e}")
+                    pdf_source = file_path
+            else:
+                pdf_source = file_path
+
+            # Validate local file path if source is string path
+            if isinstance(pdf_source, str):
+                if not os.path.exists(pdf_source):
+                    return {'success': False, 'chunk_count': 0, 'error': f'File not found: {pdf_source}'}
+
+            # Extract text from PDF source
+            text = _extract_pdf_text(pdf_source)
             if not text.strip():
                 return {'success': False, 'chunk_count': 0, 'error': 'No text found in PDF'}
 
@@ -226,11 +247,10 @@ class RAGService:
         errors = []
         for doc in docs:
             try:
-                file_path = doc.file.path
                 result = self.ingest_document(
                     symbol=symbol,
                     document_id=doc.id,
-                    file_path=file_path,
+                    file_path='',
                     doc_title=doc.title,
                     doc_type=doc.document_type,
                 )

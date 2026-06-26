@@ -2027,12 +2027,12 @@ def rag_delete_document(request, symbol, doc_id):
     
     title = doc.title
     
-    # Delete file if exists
-    if doc.file and os.path.exists(doc.file.path):
+    # Delete file if exists (using backend-agnostic delete method)
+    if doc.file:
         try:
-            os.remove(doc.file.path)
+            doc.file.delete(save=False)
         except Exception as e:
-            logger.warning(f"Could not delete document file: {e}")
+            logger.warning(f"Could not delete document file from storage: {e}")
             
     doc.delete()
 
@@ -2040,4 +2040,40 @@ def rag_delete_document(request, symbol, doc_id):
         'success': True,
         'message': f"Document '{title}' deleted successfully."
     })
+
+
+@ajax_login_required
+def rag_generate_default_document(request, symbol):
+    """
+    POST/GET: Checks if a stock has any documents.
+    If not, fetches yfinance data, generates a PDF, saves it, and indexes it via RAG.
+    """
+    from .models import Stock, StockDocument
+    from .report_generator import auto_generate_and_save_report
+
+    stock = get_object_or_404(Stock, symbol=symbol)
+    
+    # Check if documents already exist
+    existing_docs = StockDocument.objects.filter(stock=stock)
+    if existing_docs.exists():
+        return JsonResponse({
+            'success': True,
+            'message': 'Stock already has document(s) uploaded.',
+            'count': existing_docs.count()
+        })
+        
+    # Generate and save report
+    success, msg = auto_generate_and_save_report(stock)
+    
+    if success:
+        return JsonResponse({
+            'success': True,
+            'message': msg
+        })
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': msg
+        }, status=500)
+
 

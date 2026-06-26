@@ -1119,6 +1119,8 @@ function updateDropZoneWithFile(file) {
 // ============================================================
 // RAG — Load Document List
 // ============================================================
+let autoGenerateTriggered = false;
+
 async function loadRagDocuments() {
     const panel = document.getElementById('ragDocsPanel');
     try {
@@ -1164,6 +1166,27 @@ async function loadRagDocuments() {
                 </div>
                 ${pendingCount > 0 && isAdmin ? `<div style="margin-top:8px;font-size:0.8rem;color:#f59e0b;">💡 Click "🔄 Re-index All" above to index pending documents.</div>` : ''}
             `;
+        } else if (!autoGenerateTriggered) {
+            autoGenerateTriggered = true;
+            panel.innerHTML = `
+                <div class="rag-docs-loading" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px;">
+                    <div style="font-size:1.5rem; animation: spin 1s linear infinite;">⏳</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:var(--text-secondary);">📥 Fetching reports from BSE/NSE & yfinance...</div>
+                    <div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; text-align:center;">This takes 5-15 seconds on first load to download and index documents.</div>
+                </div>
+            `;
+            
+            try {
+                const genResp = await fetch(`/en/api/ai/rag/generate-default/${encodeURIComponent(SYMBOL)}/`);
+                const genData = await genResp.json();
+                if (genData.success) {
+                    loadRagDocuments();
+                } else {
+                    panel.innerHTML = `<div class="rag-no-docs">📭 Failed to auto-generate reports. ${genData.error || ''}</div>`;
+                }
+            } catch (err) {
+                panel.innerHTML = `<div class="rag-no-docs">📭 Failed to fetch documents. Network error.</div>`;
+            }
         } else {
             panel.innerHTML = `<div class="rag-no-docs">📭 No documents uploaded yet. ${isAdmin ? 'Use the Upload section above to add documents.' : 'Ask your admin to upload documents for this stock.'}</div>`;
         }

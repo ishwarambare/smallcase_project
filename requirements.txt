@@ -83,4 +83,6 @@ qrcode
 pypdf>=4.0.0          # Pure-Python PDF text extraction
 chromadb>=0.4.0       # Local file-based vector database for RAG
 pgvector>=0.3.0       # Postgres vector extension support (JSON fallback for SQLite)
+reportlab>=5.0.0      # PDF document generation for automated stock reports
+
 

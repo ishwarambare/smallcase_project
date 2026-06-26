@@ -128,12 +128,42 @@ Open your browser at:
 # Run tests
 python manage.py test
 
+# Run report generation and RAG integration test script
+python test_report_generation.py
+
 # Collect static files for production
 python manage.py collectstatic
 
 # Start shell
 python manage.py shell
+
+# Run django system check
+.venv\Scripts\python.exe manage.py check
+
+# Generate and index reports for all stocks
+python manage.py generate_reports --all
+
+# Generate and index report for a single symbol
+python manage.py generate_reports --symbol TCS.NS
+
+# Upload and index a financial PDF document for RAG querying
+python manage.py upload_document --symbol TCS.NS --file path/to/document.pdf --title "TCS Q3 Report 2025" --type earnings_call
 ```
+
+## Cloud Storage (Supabase S3)
+
+To store uploaded stock documents directly on Supabase Storage (instead of the local file system):
+1. Create a bucket named `smallcase` in your Supabase Storage dashboard.
+2. Enable S3 protocol access in your Supabase Storage settings.
+3. Add the following to your `.env` file:
+   ```env
+   AWS_ACCESS_KEY_ID=your_supabase_s3_key_id
+   AWS_SECRET_ACCESS_KEY=your_supabase_s3_secret_key
+   AWS_STORAGE_BUCKET_NAME=smallcase
+   AWS_S3_ENDPOINT_URL=https://<project-ref>.storage.supabase.co/storage/v1/s3
+   AWS_S3_REGION_NAME=ap-southeast-2
+   ```
+   *Note: If these variables are not provided, the application will automatically fall back to local disk storage.*
 
 ## Deployment
 

@@ -259,15 +259,38 @@ stocks_static = os.path.join(BASE_DIR, 'stocks', 'static')
 if os.path.exists(stocks_static):
     STATICFILES_DIRS.append(stocks_static)
 
-# Whitenoise for serving static files in production
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+# S3/Supabase Storage Integration
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+USE_S3 = AWS_ACCESS_KEY_ID is not None and AWS_SECRET_ACCESS_KEY is not None
+
+if USE_S3:
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', 'smallcase')
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', 'https://yvcrrebrvlnafvdcdiwh.storage.supabase.co/storage/v1/s3')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'ap-southeast-2')
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = True  # Generate signed URLs for secure access
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_S3_FILE_OVERWRITE = False
+    
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only

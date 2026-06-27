@@ -458,7 +458,7 @@ def scrape_and_index_bse_nse_documents(stock, limit=3) -> int:
                     result = pgvector_rag_service.ingest_document(
                         symbol=stock.symbol,
                         document_id=doc.id,
-                        file_path=doc.file.path,
+                        file_path='',
                         doc_title=title,
                         doc_type=doc_info['doc_type']
                     )
@@ -508,7 +508,7 @@ def generate_and_save_yfinance_overview(stock) -> tuple[bool, str]:
         result = pgvector_rag_service.ingest_document(
             symbol=stock.symbol,
             document_id=doc.id,
-            file_path=doc.file.path,
+            file_path='',
             doc_title=title,
             doc_type='annual_report'
         )

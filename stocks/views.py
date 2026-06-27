@@ -1979,7 +1979,7 @@ def rag_upload_document(request, symbol):
     result = rag_service.ingest_document(
         symbol=symbol,
         document_id=doc.id,
-        file_path=doc.file.path,
+        file_path='',
         doc_title=title,
         doc_type=doc_type,
     )

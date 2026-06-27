@@ -259,23 +259,17 @@ stocks_static = os.path.join(BASE_DIR, 'stocks', 'static')
 if os.path.exists(stocks_static):
     STATICFILES_DIRS.append(stocks_static)
 
-# S3/Supabase Storage Integration
-AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-USE_S3 = AWS_ACCESS_KEY_ID is not None and AWS_SECRET_ACCESS_KEY is not None
+# Supabase Storage Integration
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+USE_SUPABASE_STORAGE = SUPABASE_URL is not None and SUPABASE_KEY is not None
 
-if USE_S3:
-    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', 'smallcase')
-    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', 'https://yvcrrebrvlnafvdcdiwh.storage.supabase.co/storage/v1/s3')
-    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'ap-southeast-2')
-    AWS_DEFAULT_ACL = None
-    AWS_QUERYSTRING_AUTH = True  # Generate signed URLs for secure access
-    AWS_S3_SIGNATURE_VERSION = 's3v4'
-    AWS_S3_FILE_OVERWRITE = False
+if USE_SUPABASE_STORAGE:
+    SUPABASE_STORAGE_BUCKET = os.environ.get('SUPABASE_STORAGE_BUCKET', 'smallcase')
     
     STORAGES = {
         "default": {
-            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "BACKEND": "stocks.supabase_storage.SupabaseStorage",
         },
         "staticfiles": {
             "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",

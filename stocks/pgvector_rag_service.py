@@ -96,14 +96,58 @@ class PGVectorRAGService:
                 pass
 
             import io
-            if doc and doc.file:
-                try:
-                    with doc.file.open('rb') as f:
-                        pdf_source = io.BytesIO(f.read())
-                except Exception as e:
-                    logger.warning(f"[RAG] Failed to open file from storage for doc {document_id}, trying file_path: {e}")
-                    pdf_source = file_path
-            else:
+            pdf_source = None
+            if doc:
+                # If file field is empty or opening the file raises an exception, try auto-healing it!
+                file_load_failed = True
+                if doc.file:
+                    try:
+                        with doc.file.open('rb') as f:
+                            pdf_source = io.BytesIO(f.read())
+                        file_load_failed = False
+                    except Exception as e:
+                        logger.warning(f"[RAG] Failed to open file from storage for doc {document_id}: {e}")
+
+                if file_load_failed:
+                    # Attempt auto-healing
+                    url = None
+                    if doc.notes and doc.notes.startswith("Source URL:"):
+                        url = doc.notes.replace("Source URL:", "").strip()
+
+                    if url:
+                        logger.info(f"[RAG] Attempting to auto-heal/re-download document from {url}")
+                        import requests
+                        from django.core.files.base import ContentFile
+                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                        try:
+                            resp = requests.get(url, headers=headers, timeout=20)
+                            if resp.status_code == 200 and resp.content.startswith(b'%PDF'):
+                                filename = f"{symbol}_{doc.document_type}_{doc.fiscal_year}.pdf".replace(" ", "_")
+                                doc.file.save(filename, ContentFile(resp.content))
+                                with doc.file.open('rb') as f:
+                                    pdf_source = io.BytesIO(f.read())
+                                logger.info(f"[RAG] Successfully healed document {document_id} by downloading from URL.")
+                            else:
+                                logger.error(f"[RAG] Failed to heal: URL did not return a valid PDF (status {resp.status_code})")
+                        except Exception as download_err:
+                            logger.error(f"[RAG] Failed to download PDF for healing: {download_err}")
+
+                    elif doc.notes and ("Yahoo Finance" in doc.notes or "yfinance" in doc.notes):
+                        logger.info(f"[RAG] Attempting to auto-heal/regenerate Yahoo Finance report for {symbol}")
+                        from .report_generator import fetch_stock_report_data, compile_pdf_report
+                        from django.core.files.base import ContentFile
+                        try:
+                            data = fetch_stock_report_data(symbol)
+                            pdf_bytes = compile_pdf_report(data)
+                            filename = f"{symbol}_AnnualReport_2025.pdf"
+                            doc.file.save(filename, ContentFile(pdf_bytes))
+                            with doc.file.open('rb') as f:
+                                pdf_source = io.BytesIO(f.read())
+                            logger.info(f"[RAG] Successfully healed document {document_id} by regenerating Yahoo Finance report.")
+                        except Exception as regen_err:
+                            logger.error(f"[RAG] Failed to regenerate Yahoo Finance report: {regen_err}")
+
+            if pdf_source is None:
                 pdf_source = file_path
 
             # Validate local file path if source is string path

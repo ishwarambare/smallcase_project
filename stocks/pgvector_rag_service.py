@@ -71,7 +71,12 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
                 return [[float(val) for val in emb] for emb in embeddings]
         except Exception as e:
             print("failed while embading")
-            logger.warning(f"[RAG] Gemini embedding generation failed, falling back to local ONNX: {e}")
+            logger.warning(f"[RAG] Gemini embedding generation failed: {e}")
+            if os.environ.get("RENDER") == "true" or "RENDER" in os.environ:
+                # Do NOT fallback to local ONNX on Render since it crashes the container (OOM)
+                logger.error("[RAG] Running on Render: Suppressing local ONNX fallback to prevent OOM crash.")
+                raise RuntimeError(f"Gemini embedding generation failed: {e}")
+            logger.warning("[RAG] Falling back to local ONNX model.")
 
     # Fallback to local ONNX MiniLM
     import chromadb.utils.embedding_functions as ef

@@ -46,7 +46,7 @@ def landing(request):
         'stocks': stocks
     })
 
-# @login_required
+@login_required
 def home(request):
     """Home page showing all stocks and baskets"""
     # OPTIMIZATION: Remove automatic price updates on page load

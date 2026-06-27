@@ -33,7 +33,7 @@ This project helps users:
 - Django Channels
 - Jinja2
 - Bootstrap / HTMX
-- PostgreSQL (production) and SQLite (development)
+- Supabase PostgreSQL (Cloud Database) and SQLite (local fallback)
 - Whitenoise, Gunicorn, and Railway deployment support
 
 ## Project Structure
@@ -57,7 +57,7 @@ Before starting, make sure you have:
 - Python 3.12 installed
 - Git installed
 - A terminal or PowerShell
-- Optional: PostgreSQL for production deployment
+- Optional: A Supabase account for cloud PostgreSQL and storage hosting
 
 ## Initial Setup From Scratch
 
@@ -93,9 +93,13 @@ SECRET_KEY=your-secret-key
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+
+# Supabase PostgreSQL connection URLs
+DATABASE_URL="postgresql://<user>:<password>@<host>:6543/postgres"
+DIRECT_URL="postgresql://<user>:<password>@<host>:5432/postgres"
 ```
 
-If you do not want to set them manually, the project already provides default values for local development.
+If you do not want to set them manually, the project provides default fallback values (SQLite and local settings) for local development.
 
 ## Run the Project
 

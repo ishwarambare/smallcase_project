@@ -52,37 +52,50 @@ def _extract_pdf_text(file_source) -> str:
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     """
-    Generates embedding vectors for a list of texts.
-    First tries to use Google Gemini API (models/gemini-embedding-001) if GEMINI_API_KEY is set.
-    Otherwise, falls back to local ONNX MiniLM model from chromadb.
+    Generates embedding vectors for a list of texts using Hugging Face Inference API.
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY")
-    if gemini_key:
+    import requests
+    import time
+    
+    API_URL = "https://router.huggingface.co/hf-inference/models/BAAI/bge-large-en-v1.5/pipeline/feature-extraction"
+    hf_token = os.environ.get("HUGGINGFACE_API_KEY", "")
+    headers = {
+        "Authorization": f"Bearer {hf_token}",
+    }
+    
+    # Process in batches to avoid payload size limits and timeouts on HF API
+    batch_size = 10
+    all_embeddings = []
+    
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            response = genai.embed_content(
-                model="models/gemini-embedding-001",
-                content=texts,
-                task_type="retrieval_document",
-            )
-            embeddings = response.get('embedding', [])
-            if embeddings:
-                return [[float(val) for val in emb] for emb in embeddings]
+            response = requests.post(API_URL, headers=headers, json={"inputs": batch_texts})
+            
+            # Handle rate limiting or "Model is loading" (503 / 429)
+            if response.status_code in [503, 429]:
+                logger.warning(f"[RAG] HF API returned {response.status_code}, retrying after 3 seconds...")
+                time.sleep(3)
+                response = requests.post(API_URL, headers=headers, json={"inputs": batch_texts})
+                
+            response.raise_for_status()
+            embeddings = response.json()
+            
+            # Formatting: If HF returns a 1D array for a single text, wrap it.
+            if embeddings and isinstance(embeddings, list):
+                if isinstance(embeddings[0], (float, int)):
+                    embeddings = [embeddings]
+                all_embeddings.extend(embeddings)
+            else:
+                logger.error(f"[RAG] Unexpected response format from HF: {embeddings}")
+                
         except Exception as e:
-            print("failed while embading")
-            logger.warning(f"[RAG] Gemini embedding generation failed: {e}")
-            if os.environ.get("RENDER") == "true" or "RENDER" in os.environ:
-                # Do NOT fallback to local ONNX on Render since it crashes the container (OOM)
-                logger.error("[RAG] Running on Render: Suppressing local ONNX fallback to prevent OOM crash.")
-                raise RuntimeError(f"Gemini embedding generation failed: {e}")
-            logger.warning("[RAG] Falling back to local ONNX model.")
-
-    # Fallback to local ONNX MiniLM
-    import chromadb.utils.embedding_functions as ef
-    fn = ef.ONNXMiniLM_L6_V2()
-    embeddings = fn(texts)
-    return [[float(val) for val in emb] for emb in embeddings]
+            logger.error(f"[RAG] Hugging Face embedding generation failed on batch {i}: {e}")
+            if 'response' in locals() and hasattr(response, 'text'):
+                logger.error(f"[RAG] HF Response: {response.text}")
+            raise RuntimeError(f"Hugging Face embedding generation failed: {e}")
+            
+    return all_embeddings
 
 
 def cosine_similarity(query_emb: np.ndarray, doc_embs: np.ndarray) -> np.ndarray:
@@ -193,7 +206,15 @@ class PGVectorRAGService:
 
             # 4. Save to Database inside a transaction
             with transaction.atomic():
-                # Get the document
+                # Get the document and lock it to prevent concurrent indexing IntegrityErrors
+                try:
+                    # Using select_for_update prevents two requests from indexing the same document at the same time
+                    doc = StockDocument.objects.select_for_update(nowait=True).get(id=document_id)
+                except Exception as e:
+                    logger.warning(f"[RAG] Document {document_id} is currently locked (likely indexing already): {e}")
+                    return {'success': False, 'chunk_count': 0, 'error': 'Document is currently being indexed by another process'}
+                
+                # Delete existing chunks for this document (idempotent re-index)
                 doc = StockDocument.objects.get(id=document_id)
                 
                 # Delete existing chunks for this document (idempotent re-index)
@@ -274,16 +295,17 @@ class PGVectorRAGService:
             
             # 2. Auto-reindex if no chunks found but documents exist
             if not chunks.exists():
-                logger.info(f"[RAG] No chunks in DB for {symbol}, auto-reindexing...")
-                reindex_result = self.reindex_symbol(symbol)
-                if reindex_result['indexed'] == 0:
-                    return {
-                        'answer': None,
-                        'sources': [],
-                        'error': f'Documents exist but could not be indexed. Please re-upload. Errors: {"; ".join(reindex_result["errors"][:2])}'
-                    }
-                # Re-fetch chunks after reindexing
-                chunks = DocumentChunk.objects.filter(document__in=active_docs).select_related('document')
+                logger.info(f"[RAG] No chunks in DB for {symbol}, auto-reindexing in background...")
+                import threading
+                thread = threading.Thread(target=self.reindex_symbol, args=(symbol,))
+                thread.daemon = True
+                thread.start()
+                
+                return {
+                    'answer': 'The documents for this stock are currently being analyzed and indexed in the background. Please check back in a minute or two to ask your question.',
+                    'sources': [],
+                    'error': None
+                }
 
             chunk_list = list(chunks)
             if not chunk_list:

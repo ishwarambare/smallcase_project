@@ -1975,26 +1975,28 @@ def rag_upload_document(request, symbol):
         is_indexed=False,
     )
 
-    # Index synchronously (for small PDFs this is fast; large PDFs may take ~10s)
-    result = rag_service.ingest_document(
-        symbol=symbol,
-        document_id=doc.id,
-        file_path='',
-        doc_title=title,
-        doc_type=doc_type,
-    )
-
-    if result['success']:
-        return JsonResponse({
-            'success': True,
+    # Index in background thread to avoid ASGI timeouts for large PDFs
+    import threading
+    thread = threading.Thread(
+        target=rag_service.ingest_document,
+        kwargs={
+            'symbol': symbol,
             'document_id': doc.id,
-            'title': doc.title,
-            'chunk_count': result['chunk_count'],
-            'message': f"Document indexed successfully with {result['chunk_count']} chunks.",
-        })
-    else:
-        doc.delete()  # Clean up on failure
-        return JsonResponse({'success': False, 'error': result.get('error', 'Indexing failed')})
+            'file_path': '',
+            'doc_title': title,
+            'doc_type': doc_type,
+        }
+    )
+    thread.daemon = True
+    thread.start()
+
+    return JsonResponse({
+        'success': True,
+        'document_id': doc.id,
+        'title': doc.title,
+        'chunk_count': 0,
+        'message': f"Document uploaded successfully and is currently being indexed in the background.",
+    })
 
 
 # ============================================================
@@ -2152,18 +2154,15 @@ def rag_generate_default_document(request, symbol):
             'count': existing_docs.count()
         })
         
-    # Generate and save report
-    success, msg = auto_generate_and_save_report(stock)
+    # Generate and save report in background to prevent ASGI timeouts
+    import threading
+    thread = threading.Thread(target=auto_generate_and_save_report, args=(stock,))
+    thread.daemon = True
+    thread.start()
     
-    if success:
-        return JsonResponse({
-            'success': True,
-            'message': msg
-        })
-    else:
-        return JsonResponse({
-            'success': False,
-            'error': msg
-        }, status=500)
+    return JsonResponse({
+        'success': True,
+        'message': "Document fetching and indexing has started in the background. Please wait a minute or two."
+    })
 
 

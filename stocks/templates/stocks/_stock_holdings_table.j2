@@ -1,3 +1,15 @@
+<style>
+.stock-symbol-link:hover {
+    transform: translateX(4px);
+}
+.stock-symbol-link:hover .stock-sym-text {
+    text-decoration: underline;
+}
+.stock-symbol-link:hover .stock-name-text {
+    color: var(--text-primary) !important;
+}
+</style>
+
 <div class="stock-holdings-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 class="section-title" style="margin-bottom: 0;">Stock Holdings ({{ items|length }} stocks)</h2>
     <button class="btn btn-primary" onclick="openAddStockModal()" id="add-stock-btn">
@@ -26,8 +38,10 @@
         {% set total.invested = total.invested + item.allocated_amount %}
         <tr data-item-id="{{ item.id }}">
             <td>
-                <strong>{{ item.stock.symbol }}</strong><br>
-                <small style="color: #666;">{{ item.stock.name }}</small>
+                <a href="{{ url('stock_detail', args=[item.stock.symbol]) }}" class="stock-symbol-link" style="text-decoration: none; display: inline-block; transition: transform 0.2s ease;">
+                    <strong class="stock-sym-text" style="color: var(--primary-color); font-weight: 700; transition: color 0.2s;">{{ item.stock.symbol }}</strong><br>
+                    <small class="stock-name-text" style="color: var(--text-secondary, #666); transition: color 0.2s;">{{ item.stock.name }}</small>
+                </a>
             </td>
             <td class="editable-cell weight-cell">
                 <div class="display-mode">

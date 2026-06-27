@@ -23,70 +23,129 @@
     {% endif %}
 
     <form method="POST" action="{{ url('basket_create') }}">
+        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
         
-<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-        <div class="form-group">
-            <label for="name">Basket Name *</label>
-            <input type="text" id="name" name="name" required placeholder="e.g., Tech Leaders Portfolio" value="{{ prefill_name }}">
-        </div>
+        <div class="basket-layout-grid">
+            <!-- Left Panel: Selected Stocks & Weight Distribution Visualizer -->
+            <div class="basket-left-panel">
+                <div class="panel-header">
+                    <h3>Selected Portfolio</h3>
+                    <span class="selected-badge" id="selectedBadge">0</span>
+                </div>
+                
+                <div id="selectedStocksList" class="selected-stocks-list">
+                    <div class="empty-selected-state">
+                        <div class="empty-icon">📈</div>
+                        <p>No stocks selected yet</p>
+                        <span>Select stocks from the list to build your portfolio.</span>
+                    </div>
+                </div>
 
-        <div class="form-group">
-            <label for="description">Description</label>
-            <textarea id="description" name="description" placeholder="Describe your investment strategy...">{{ prefill_description }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label for="investment_amount">Total Investment Amount (₹) *</label>
-            <input type="number" id="investment_amount" name="investment_amount" required
-                   min="1000" step="0.01" placeholder="100000" value="{{ prefill_investment }}">
-            <div class="helper-text">This amount will be equally distributed across selected stocks</div>
-        </div>
-
-        <div class="form-group">
-            <div class="label-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <label style="margin-bottom: 0;">Select Stocks * <span style="font-weight: 400; color: var(--text-secondary); font-size: 0.85em;">(Min 2)</span></label>
-                <div class="selected-count" id="selectedCount">
-                    <span id="count">0</span> selected
+                <div class="basket-summary-card">
+                    <h4>Basket Summary</h4>
+                    <div class="summary-details">
+                        <div class="summary-row">
+                            <span class="summary-label">Total Stocks</span>
+                            <span class="summary-val" id="summaryCount">0</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Total Investment</span>
+                            <span class="summary-val" id="summaryInvestment">₹0.00</span>
+                        </div>
+                        <div class="summary-row highlight">
+                            <span class="summary-label">Est. Weight / Stock</span>
+                            <span class="summary-val" id="summaryWeight">0%</span>
+                        </div>
+                        <div class="summary-row highlight">
+                            <span class="summary-label">Est. Allocation / Stock</span>
+                            <span class="summary-val" id="summaryAllocPerStock">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Portfolio Health Advisor & Red Flags Checker -->
+                <div class="basket-advisor-card" id="basketAdvisorCard" style="display: none; margin-top: 20px;">
+                    <div class="advisor-header">
+                        <h4>🛡️ Health Advisor &amp; Red Flags</h4>
+                    </div>
+                    <div class="advisor-body">
+                        <div id="advisorHealthScore" class="advisor-health-score">
+                            <!-- Overall verdict / score of selected stocks -->
+                        </div>
+                        <div id="advisorWarningsList" class="advisor-warnings-list">
+                            <!-- List of warnings / red flags -->
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="search-box">
-                <input type="text" id="searchStock" placeholder="🔍 Search stocks..." onkeyup="filterStocks()">
-            </div>
+            <!-- Right Panel: Form Fields and Stock Selection -->
+            <div class="basket-right-panel">
+                <div class="form-group">
+                    <label for="name">Basket Name *</label>
+                    <input type="text" id="name" name="name" required placeholder="e.g., Tech Leaders Portfolio" value="{{ prefill_name }}">
+                </div>
 
-            <div class="stocks-selection" id="stocksList">
-                {% if stocks %}
-                    {% for stock in stocks %}
-                        <div class="stock-checkbox" data-name="{{ stock.name }}"
-                             data-symbol="{{ stock.symbol }}">
-                            <input type="checkbox" name="stocks" value="{{ stock.symbol }}"
-                                   id="stock_{{ stock.id }}" onchange="updateCount()" 
-                                   {% if stock.symbol in prefill_stocks %}checked{% endif %}>
-                            <label for="stock_{{ stock.id }}" class="stock-info">
-                                <div class="stock-symbol">{{ stock.symbol }}</div>
-                                <div class="stock-name">{{ stock.name }}</div>
-                            </label>
-                            <div class="stock-price">
-                                {% if stock.current_price %}
-                                    ₹{{ stock.current_price }}
-                                {% else %}
-                                    Price N/A
-                                {% endif %}
-                            </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" placeholder="Describe your investment strategy...">{{ prefill_description }}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="investment_amount">Total Investment Amount (₹) *</label>
+                    <input type="number" id="investment_amount" name="investment_amount" required
+                           min="1000" step="0.01" placeholder="100000" value="{{ prefill_investment }}">
+                    <div class="helper-text">This amount will be equally distributed across selected stocks</div>
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <label style="margin-bottom: 0;">Select Stocks * <span style="font-weight: 400; color: var(--text-secondary); font-size: 0.85em;">(Min 2)</span></label>
+                        <div class="selected-count" id="selectedCount">
+                            <span id="count">0</span> selected
                         </div>
-                    {% endfor %}
-                {% else %}
-                    <p class="no-stocks-message">
-                        No stocks available. Please load stocks first.
-                    </p>
-                {% endif %}
-            </div>
-            <div class="helper-text">Each stock will have equal weight in your basket. Select at least 2 stocks.</div>
-        </div>
+                    </div>
 
-        <div class="actions">
-            <button type="submit" class="btn btn-primary">Create Basket</button>
-            <a href="{{ url('home') }}" class="btn btn-secondary">Cancel</a>
+                    <div class="search-box">
+                        <input type="text" id="searchStock" placeholder="🔍 Search stocks..." onkeyup="filterStocks()">
+                    </div>
+
+                    <div class="stocks-selection" id="stocksList">
+                        {% if stocks %}
+                            {% for stock in stocks %}
+                                <div class="stock-checkbox" data-name="{{ stock.name }}"
+                                     data-symbol="{{ stock.symbol }}"
+                                     data-price="{% if stock.current_price %}{{ stock.current_price }}{% else %}0{% endif %}">
+                                    <input type="checkbox" name="stocks" value="{{ stock.symbol }}"
+                                           id="stock_{{ stock.id }}" onchange="updateCount()" 
+                                           {% if stock.symbol in prefill_stocks %}checked{% endif %}>
+                                    <label for="stock_{{ stock.id }}" class="stock-info">
+                                        <div class="stock-symbol">{{ stock.symbol }}</div>
+                                        <div class="stock-name">{{ stock.name }}</div>
+                                    </label>
+                                    <div class="stock-price">
+                                        {% if stock.current_price %}
+                                            ₹{{ stock.current_price }}
+                                        {% else %}
+                                            Price N/A
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-stocks-message">
+                                No stocks available. Please load stocks first.
+                            </p>
+                        {% endif %}
+                    </div>
+                    <div class="helper-text">Each stock will have equal weight in your basket. Select at least 2 stocks.</div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">Create Basket</button>
+                    <a href="{{ url('home') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </div>
         </div>
     </form>
 

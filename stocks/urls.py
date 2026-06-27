@@ -49,6 +49,7 @@ urlpatterns = [
     # AI Stock Intelligence APIs (async — called after page load)
     path('api/ai/stock-summary/<str:symbol>/', views.ai_stock_summary, name='ai_stock_summary'),
     path('api/ai/news-sentiment/<str:symbol>/', views.ai_news_sentiment, name='ai_news_sentiment'),
+    path('api/stock/analysis-summary/', views.stock_analysis_summary_api, name='stock_analysis_summary_api'),
 
     # Autonomous Portfolio Agent
     path('api/ai/portfolio-agent/<int:basket_id>/', views.portfolio_agent_run, name='portfolio_agent_run'),

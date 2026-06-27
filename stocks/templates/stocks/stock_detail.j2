@@ -196,6 +196,46 @@
         {% endif %}
     </div>
 
+    {# ---- Fundamental Health Scorecard ---- #}
+    <div class="detail-section fundamental-scorecard-section">
+        <div class="section-heading">🏆 Fundamental Health Scorecard</div>
+        
+        {% if recommendation.red_flags %}
+        <div class="red-flags-alert">
+            <div class="red-flags-alert-title">🚨 Critical Red Flags Alert</div>
+            <ul class="red-flags-list">
+                {% for flag in recommendation.red_flags %}
+                    <li>{{ flag }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="scorecard-grid">
+            {% macro scorecard_row(title, rule_name, score_item) %}
+            <div class="scorecard-item {% if score_item.passed %}passed{% else %}failed{% endif %}">
+                <div class="scorecard-icon">
+                    {% if score_item.passed %}🟢{% else %}🔴{% endif %}
+                </div>
+                <div class="scorecard-info">
+                    <div class="scorecard-title">{{ title }}</div>
+                    <div class="scorecard-rule">{{ rule_name }}</div>
+                    <div class="scorecard-desc">{{ score_item.text }}</div>
+                </div>
+            </div>
+            {% endmacro %}
+
+            {{ scorecard_row("Avoid Relying on Tips", "Rule 1: Learn fundamental analysis", recommendation.scorecard.avoid_tips) }}
+            {{ scorecard_row("Check Revenue & Profit Growth", "Rule 2: Stable top/bottom line growth", recommendation.scorecard.revenue_profit_growth) }}
+            {{ scorecard_row("Analyze Assets vs Liabilities", "Rule 3: Assets must exceed liabilities & grow", recommendation.scorecard.assets_liabilities) }}
+            {{ scorecard_row("Monitor Cash Flow", "Rule 4: Positive and growing Free Cash Flow", recommendation.scorecard.cash_flow) }}
+            {{ scorecard_row("Valuations (P/E & P/B)", "Rule 5: Low valuation compared to peers/book", recommendation.scorecard.valuation) }}
+            {{ scorecard_row("Debt-to-Equity Ratio", "Rule 6: Low debt to avoid heavy interest costs", recommendation.scorecard.debt_to_equity) }}
+            {{ scorecard_row("Intrinsic (Fair) Value", "Rule 7: Price should be below Graham intrinsic value", recommendation.scorecard.intrinsic_value) }}
+            {{ scorecard_row("Management and Shareholding", "Rule 8: Strong promoter & institutional commitment", recommendation.scorecard.shareholding) }}
+        </div>
+    </div>
+
     {# ---- Ownership & Market Depth ---- #}
     <div class="detail-section">
         <div class="section-heading">📦 Market Depth &amp; Ownership</div>

@@ -1846,6 +1846,88 @@ def portfolio_agent_run(request, basket_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@login_required
+def stock_analysis_summary_api(request):
+    """
+    GET API: accepts a comma-separated list of symbols (e.g. ?symbols=TCS.NS,TATASTEEL.NS)
+    Returns a dict with fundamentals, buy recommendations, scorecard checks, and red flags for each.
+    """
+    symbols_raw = request.GET.get('symbols', '').strip()
+    if not symbols_raw:
+        return JsonResponse({'success': False, 'error': 'No symbols provided'}, status=400)
+
+    symbols = [s.strip().upper() for s in symbols_raw.split(',') if s.strip()]
+    
+    results = {}
+    from .stock_analysis import (
+        get_stock_fundamentals,
+        get_technical_indicators,
+        get_ownership_analysis,
+        get_policy_alignment,
+        get_global_impact,
+        get_buy_recommendation
+    )
+
+    for symbol in symbols:
+        cache_key = f'stock_summary_api_v3_{symbol}'
+        data = cache.get(cache_key)
+        
+        if not data:
+            try:
+                fundamentals = get_stock_fundamentals(symbol)
+                if 'error' in fundamentals and not fundamentals.get('current_price'):
+                    results[symbol] = {'error': fundamentals['error']}
+                    continue
+
+                indicators = get_technical_indicators(symbol)
+                ownership = get_ownership_analysis(fundamentals)
+                
+                from .stock_analysis import get_news_sentiment
+                news = get_news_sentiment(symbol)
+                policy = get_policy_alignment(fundamentals.get('sector', ''), news.get('articles', []))
+                global_impact = get_global_impact(fundamentals.get('sector', ''))
+                
+                recommendation = get_buy_recommendation(
+                    fundamentals,
+                    indicators,
+                    news=news,
+                    ownership=ownership,
+                    policy=policy,
+                    global_impact=global_impact
+                )
+                
+                data = {
+                    'symbol': symbol,
+                    'name': fundamentals.get('name', symbol),
+                    'price': fundamentals.get('current_price'),
+                    'pe_ratio': fundamentals.get('pe_ratio'),
+                    'pb_ratio': fundamentals.get('price_to_book'),
+                    'debt_to_equity': fundamentals.get('debt_to_equity'),
+                    'revenue_growth_yoy': fundamentals.get('revenue_growth_yoy'),
+                    'earnings_growth_yoy': fundamentals.get('earnings_growth_yoy'),
+                    'intrinsic_value': fundamentals.get('intrinsic_value'),
+                    'verdict': recommendation.get('verdict'),
+                    'verdict_color': recommendation.get('verdict_color'),
+                    'verdict_emoji': recommendation.get('verdict_emoji'),
+                    'score': recommendation.get('score'),
+                    'max_score': recommendation.get('max_score'),
+                    'red_flags': recommendation.get('red_flags', []),
+                    'scorecard': recommendation.get('scorecard', {}),
+                }
+                cache.set(cache_key, data, 900)  # cache for 15 minutes
+            except Exception as e:
+                results[symbol] = {'error': str(e)}
+                continue
+        
+        results[symbol] = data
+
+    return JsonResponse({
+        'success': True,
+        'results': results
+    })
+
+
+
 # ============================================================
 # RAG Document Upload API
 # ============================================================

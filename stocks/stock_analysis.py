@@ -144,6 +144,119 @@ def get_stock_fundamentals(symbol: str) -> dict:
         def s(key, default=None):
             return _safe(info.get(key, default), default)
 
+        # Get financials, balance sheet and cashflow data
+        revenue_growth_yoy = None
+        earnings_growth_yoy = None
+        fcf_positive = None
+        fcf_growing = None
+        fcf_history = []
+        assets_growing = None
+        assets_higher_than_liabilities = None
+        total_assets = None
+        total_liab = None
+        assets_history = []
+        liabilities_history = []
+        intrinsic_value = None
+
+        try:
+            financials = ticker.financials
+            balance_sheet = ticker.balance_sheet
+            cashflow = ticker.cashflow
+        except Exception as fe:
+            print(f"[StockAnalysis] Error getting financial sheets for {symbol}: {fe}")
+            financials = None
+            balance_sheet = None
+            cashflow = None
+
+        # 1. Revenue & Earnings growth from financials
+        if financials is not None and not financials.empty:
+            rev_row = None
+            for idx in financials.index:
+                if idx.lower() == 'total revenue':
+                    rev_row = financials.loc[idx]
+                    break
+            net_inc_row = None
+            for idx in financials.index:
+                if idx.lower() == 'net income':
+                    net_inc_row = financials.loc[idx]
+                    break
+            
+            if rev_row is not None and not rev_row.dropna().empty:
+                rev_list = rev_row.dropna().tolist()
+                if len(rev_list) >= 2 and rev_list[1] > 0:
+                    revenue_growth_yoy = round(((rev_list[0] - rev_list[1]) / rev_list[1]) * 100, 2)
+            
+            if net_inc_row is not None and not net_inc_row.dropna().empty:
+                inc_list = net_inc_row.dropna().tolist()
+                if len(inc_list) >= 2:
+                    if inc_list[1] > 0:
+                        earnings_growth_yoy = round(((inc_list[0] - inc_list[1]) / inc_list[1]) * 100, 2)
+                    elif inc_list[1] < 0 and inc_list[0] > inc_list[1]:
+                        earnings_growth_yoy = round(((inc_list[0] - inc_list[1]) / abs(inc_list[1])) * 100, 2)
+
+        # 2. Assets & Liabilities from balance sheet
+        if balance_sheet is not None and not balance_sheet.empty:
+            assets_row = None
+            for idx in balance_sheet.index:
+                if idx.lower() == 'total assets':
+                    assets_row = balance_sheet.loc[idx]
+                    break
+            liab_row = None
+            for idx in balance_sheet.index:
+                if idx.lower() in ['total liabilities', 'total liabilities net minority interest', 'total liabilities net minority interest']:
+                    liab_row = balance_sheet.loc[idx]
+                    break
+            if liab_row is None:
+                for idx in balance_sheet.index:
+                    if 'liabilities' in idx.lower():
+                        liab_row = balance_sheet.loc[idx]
+                        break
+
+            if assets_row is not None and not assets_row.dropna().empty:
+                assets_list = assets_row.dropna().tolist()
+                assets_history = [float(x) for x in assets_list[:4]]
+                if len(assets_list) >= 1:
+                    total_assets = float(assets_list[0])
+                if len(assets_list) >= 2:
+                    assets_growing = assets_list[0] > assets_list[1]
+            
+            if liab_row is not None and not liab_row.dropna().empty:
+                liab_list = liab_row.dropna().tolist()
+                liabilities_history = [float(x) for x in liab_list[:4]]
+                if len(liab_list) >= 1:
+                    total_liab = float(liab_list[0])
+                    
+            if total_assets is not None and total_liab is not None:
+                assets_higher_than_liabilities = total_assets > total_liab
+
+        # 3. Cash Flow from cashflow statement
+        if cashflow is not None and not cashflow.empty:
+            fcf_row = None
+            for idx in cashflow.index:
+                if idx.lower() == 'free cash flow':
+                    fcf_row = cashflow.loc[idx]
+                    break
+            if fcf_row is not None and not fcf_row.dropna().empty:
+                fcf_list = fcf_row.dropna().tolist()
+                fcf_history = [float(x) for x in fcf_list[:4]]
+                if len(fcf_list) >= 1:
+                    fcf_positive = fcf_list[0] > 0
+                if len(fcf_list) >= 2:
+                    fcf_growing = fcf_list[0] > fcf_list[1]
+
+        # 4. Intrinsic value via Graham Number
+        eps_val = info.get("trailingEps")
+        bv_val = info.get("bookValue")
+        if eps_val and bv_val and eps_val > 0 and bv_val > 0:
+            try:
+                intrinsic_value = round(math.sqrt(22.5 * float(eps_val) * float(bv_val)), 2)
+            except Exception:
+                pass
+
+        debt_to_equity = s("debtToEquity")
+        if debt_to_equity is not None:
+            debt_to_equity = float(debt_to_equity) / 100.0 if float(debt_to_equity) > 5.0 else float(debt_to_equity)
+
         return {
             "symbol": symbol,
             "name": s("longName") or s("shortName") or symbol,
@@ -168,7 +281,6 @@ def get_stock_fundamentals(symbol: str) -> dict:
             "industry": s("industry", "N/A"),
             "description": s("longBusinessSummary", ""),
             "currency": s("currency", "INR"),
-            # Ownership fields (used by ownership analysis)
             "bid": s("bid"),
             "ask": s("ask"),
             "held_pct_institutions": s("heldPercentInstitutions"),
@@ -176,6 +288,19 @@ def get_stock_fundamentals(symbol: str) -> dict:
             "float_shares": s("floatShares"),
             "shares_outstanding": s("sharesOutstanding"),
             "short_ratio": s("shortRatio"),
+            "debt_to_equity": debt_to_equity,
+            "revenue_growth_yoy": revenue_growth_yoy,
+            "earnings_growth_yoy": earnings_growth_yoy,
+            "fcf_positive": fcf_positive,
+            "fcf_growing": fcf_growing,
+            "fcf_history": fcf_history,
+            "assets_growing": assets_growing,
+            "assets_higher_than_liabilities": assets_higher_than_liabilities,
+            "total_assets": total_assets,
+            "total_liab": total_liab,
+            "assets_history": assets_history,
+            "liabilities_history": liabilities_history,
+            "intrinsic_value": intrinsic_value,
         }
     except Exception as e:
         print(f"[StockAnalysis] Fundamentals error for {symbol}: {e}")
@@ -579,20 +704,235 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
                             policy: dict = None, global_impact: dict = None) -> dict:
     """
     Score all signals and return a unified verdict with reasons.
-    Max total score: ±17
+    Incorporates the 8 Golden Rules & Fundamental Scorecard.
+    Max total score: ±25
     """
     score = 0
     bullish_reasons = []
     bearish_reasons = []
+    red_flags = []
+    scorecard = {}
 
     price = fundamentals.get("current_price")
     week_52_high = fundamentals.get("week_52_high")
     week_52_low = fundamentals.get("week_52_low")
     pe = fundamentals.get("pe_ratio")
+    pb = fundamentals.get("price_to_book")
     beta = fundamentals.get("beta")
     div_yield = fundamentals.get("dividend_yield")
+    
+    # New metrics from fundamentals
+    revenue_growth = fundamentals.get("revenue_growth_yoy")
+    earnings_growth = fundamentals.get("earnings_growth_yoy")
+    fcf_positive = fundamentals.get("fcf_positive")
+    fcf_growing = fundamentals.get("fcf_growing")
+    assets_growing = fundamentals.get("assets_growing")
+    assets_higher = fundamentals.get("assets_higher_than_liabilities")
+    total_assets = fundamentals.get("total_assets")
+    total_liab = fundamentals.get("total_liab")
+    intrinsic_value = fundamentals.get("intrinsic_value")
+    debt_to_equity = fundamentals.get("debt_to_equity")
+    insider_holding = fundamentals.get("held_pct_insiders")
+    inst_holding = fundamentals.get("held_pct_institutions")
 
-    # --- Fundamental signals ---
+    # Always pass the "Avoid tips" check since we are using this scorecard
+    scorecard["avoid_tips"] = {
+        "passed": True,
+        "text": "Passed: You are using structured fundamental analysis instead of stock tips."
+    }
+
+    # --- 1. Revenue & Profit Growth ---
+    rev_ok = False
+    prof_ok = False
+    if revenue_growth is not None:
+        if revenue_growth > 0:
+            rev_ok = True
+        else:
+            red_flags.append(f"Dropping Revenues: Revenue shrank by {abs(revenue_growth)}% YoY")
+    else:
+        rev_ok = True  # neutral if data missing
+        
+    if earnings_growth is not None:
+        if earnings_growth > 0:
+            prof_ok = True
+        else:
+            red_flags.append(f"Dropping Profits: Net income shrank by {abs(earnings_growth)}% YoY")
+    else:
+        prof_ok = True
+
+    if rev_ok and prof_ok:
+        score += 2
+        bullish_reasons.append("Consistent Growth: Both YoY revenue & profit are growing")
+        scorecard["revenue_profit_growth"] = {
+            "passed": True,
+            "text": f"Passed: Revenue grew by {revenue_growth or 0}% and Profit by {earnings_growth or 0}% YoY."
+        }
+    else:
+        score -= 2
+        bearish_reasons.append("Revenue or net income is declining YoY")
+        scorecard["revenue_profit_growth"] = {
+            "passed": False,
+            "text": f"Failed: Declining growth. Rev YoY: {revenue_growth or 0}%, Profit YoY: {earnings_growth or 0}%."
+        }
+
+    # --- 2. Assets vs Liabilities ---
+    if total_assets is not None and total_liab is not None:
+        if assets_higher:
+            score += 2
+            bullish_reasons.append(f"Financial Stability: Total assets (₹{total_assets/1e9:.1f} Cr) exceed liabilities (₹{total_liab/1e9:.1f} Cr)")
+            scorecard["assets_liabilities"] = {
+                "passed": True,
+                "text": f"Passed: Assets (₹{total_assets/1e9:.1f} Cr) exceed liabilities (₹{total_liab/1e9:.1f} Cr)."
+            }
+        else:
+            score -= 3
+            red_flags.append("Liabilities exceed Assets: High threat of insolvency/bankruptcy")
+            bearish_reasons.append("Total liabilities exceed total assets")
+            scorecard["assets_liabilities"] = {
+                "passed": False,
+                "text": "Failed: Liabilities exceed total assets (financial instability)."
+            }
+    else:
+        scorecard["assets_liabilities"] = {
+            "passed": True,
+            "text": "Passed (Neutral): Insufficient asset/liability history."
+        }
+
+    # --- 3. Cash Flow Check ---
+    if fcf_positive is not None:
+        if fcf_positive:
+            score += 2
+            growth_text = "and growing" if fcf_growing else "but declining YoY"
+            if not fcf_growing:
+                bearish_reasons.append("Free cash flow is declining YoY")
+            bullish_reasons.append(f"Cash Flow: Company has positive free cash flow {growth_text}")
+            scorecard["cash_flow"] = {
+                "passed": True,
+                "text": f"Passed: Free Cash Flow is positive (FCF growing: {fcf_growing})."
+            }
+        else:
+            score -= 3
+            red_flags.append("Negative Free Cash Flow: Business burns cash; relies on external funding")
+            bearish_reasons.append("Negative free cash flow")
+            scorecard["cash_flow"] = {
+                "passed": False,
+                "text": "Failed: Free Cash Flow is negative (risk of cash crunch)."
+            }
+    else:
+        scorecard["cash_flow"] = {
+            "passed": True,
+            "text": "Passed (Neutral): Free cash flow data unavailable."
+        }
+
+    # --- 4. Intrinsic Value ---
+    if price and intrinsic_value:
+        if price < intrinsic_value:
+            score += 2
+            bullish_reasons.append(f"Undervalued: Price (₹{price:.1f}) is below Graham value (₹{intrinsic_value:.1f})")
+            scorecard["intrinsic_value"] = {
+                "passed": True,
+                "text": f"Passed: Undervalued. Stock price ₹{price:.1f} is below Graham Intrinsic Value ₹{intrinsic_value:.1f}."
+            }
+        else:
+            scorecard["intrinsic_value"] = {
+                "passed": False,
+                "text": f"Failed: Premium pricing. Stock price ₹{price:.1f} is above Graham Intrinsic Value ₹{intrinsic_value:.1f}."
+            }
+    else:
+        scorecard["intrinsic_value"] = {
+            "passed": True,
+            "text": "Passed (Neutral): Intrinsic value cannot be calculated."
+        }
+
+    # --- 5. P/E and P/B Valuations ---
+    pe_pb_ok = True
+    if pe is not None:
+        if pe < 20:
+            score += 1
+            bullish_reasons.append(f"Valuation: Reasonable P/E ratio ({pe:.1f}x)")
+        else:
+            pe_pb_ok = False
+            bearish_reasons.append(f"P/E ratio is premium ({pe:.1f}x)")
+    if pb is not None:
+        if pb <= 2.0:
+            score += 1
+            bullish_reasons.append(f"Valuation: Excellent P/B ratio ({pb:.1f}x)")
+        else:
+            pe_pb_ok = False
+            bearish_reasons.append(f"P/B ratio is high ({pb:.1f}x)")
+            
+    if pe_pb_ok:
+        scorecard["valuation"] = {
+            "passed": True,
+            "text": f"Passed: Good valuations. P/E: {pe or 'N/A'}x, P/B: {pb or 'N/A'}x."
+        }
+    else:
+        scorecard["valuation"] = {
+            "passed": False,
+            "text": f"Failed: Premium valuations. P/E: {pe or 'N/A'}x, P/B: {pb or 'N/A'}x."
+        }
+
+    # --- 6. Debt-to-Equity ---
+    if debt_to_equity is not None:
+        if debt_to_equity <= 1.0:
+            score += 2
+            bullish_reasons.append(f"Healthy leverage: Low Debt-to-Equity ratio ({debt_to_equity:.2f})")
+            scorecard["debt_to_equity"] = {
+                "passed": True,
+                "text": f"Passed: Excellent leverage. Debt-to-Equity is {debt_to_equity:.2f} (ideal under 1.0)."
+            }
+        elif debt_to_equity <= 2.0:
+            score += 1
+            bullish_reasons.append(f"Moderate leverage: Debt-to-Equity ratio ({debt_to_equity:.2f}) is manageable")
+            scorecard["debt_to_equity"] = {
+                "passed": True,
+                "text": f"Passed: Moderate leverage. Debt-to-Equity is {debt_to_equity:.2f} (acceptable under 2.0)."
+            }
+        else:
+            score -= 3
+            red_flags.append(f"Massive Debt: Extremely high Debt-to-Equity ratio of {debt_to_equity:.2f}")
+            bearish_reasons.append(f"High Debt-to-Equity ratio ({debt_to_equity:.2f}) increases interest expense")
+            scorecard["debt_to_equity"] = {
+                "passed": False,
+                "text": f"Failed: Excessive leverage. Debt-to-Equity is {debt_to_equity:.2f} (above 2.0 limit)."
+            }
+    else:
+        scorecard["debt_to_equity"] = {
+            "passed": True,
+            "text": "Passed (Neutral): Debt-to-equity ratio data unavailable."
+        }
+
+    # --- 7. Management & Shareholding ---
+    insider_pct = (insider_holding * 100) if insider_holding else None
+    inst_pct = (inst_holding * 100) if inst_holding else None
+    
+    sh_ok = True
+    if insider_pct is not None:
+        if insider_pct < 15:
+            sh_ok = False
+            red_flags.append(f"Low Promoter Holding: Promoters hold only {insider_pct:.1f}% of the company")
+            bearish_reasons.append(f"Low promoter holding ({insider_pct:.1f}%) suggests weak founder commitment")
+        elif insider_pct >= 35:
+            score += 1
+            bullish_reasons.append(f"Promoter Confidence: Healthy promoter stake ({insider_pct:.1f}%)")
+            
+    if inst_pct is not None:
+        if inst_pct >= 25:
+            score += 1
+            bullish_reasons.append(f"Institutional backing: DIIs/FIIs hold {inst_pct:.1f}%")
+            
+    if sh_ok:
+        scorecard["shareholding"] = {
+            "passed": True,
+            "text": f"Passed: Promoter stake is {insider_pct or 'N/A'}% and Institutional stake is {inst_pct or 'N/A'}%."
+        }
+    else:
+        scorecard["shareholding"] = {
+            "passed": False,
+            "text": f"Failed: Poor shareholding structure. Promoter stake: {insider_pct or 'N/A'}%."
+        }
+
+    # --- Legacy Fundamental, Technical & Global checks (capped weight) ---
     if price and week_52_low and week_52_high:
         rng = week_52_high - week_52_low
         if rng > 0:
@@ -603,18 +943,6 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
             elif pos > 0.85:
                 score -= 1
                 bearish_reasons.append("Trading near 52-week high — limited near-term upside")
-
-    if pe is not None:
-        if pe < 15:
-            score += 1
-            bullish_reasons.append(f"Low P/E ({pe:.1f}x) — stock appears undervalued vs. peers")
-        elif pe > 50:
-            score -= 1
-            bearish_reasons.append(f"High P/E ({pe:.1f}x) — premium valuation, execution risk")
-
-    if div_yield and div_yield > 0.02:
-        score += 1
-        bullish_reasons.append(f"Healthy dividend yield ({div_yield*100:.1f}%) — passive income")
 
     if beta is not None:
         if beta < 0.8:
@@ -674,16 +1002,6 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
         elif ns < 0:
             bearish_reasons.append(f"Negative news sentiment ({news['negative_count']} negative vs {news['positive_count']} positive articles)")
 
-    # --- Ownership ---
-    if ownership:
-        os_ = ownership.get("score", 0)
-        score += os_
-        for sig_type, sig_text in ownership.get("signals", []):
-            if sig_type == "bullish":
-                bullish_reasons.append(sig_text)
-            else:
-                bearish_reasons.append(sig_text)
-
     # --- Policy ---
     if policy:
         ps = policy.get("score", 0)
@@ -702,14 +1020,14 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
             else:
                 bearish_reasons.append(sig_text)
 
-    # --- Verdict (adjusted for ±17 range) ---
-    if score >= 7:
+    # --- Verdict (adjusted for ±25 range) ---
+    if score >= 10:
         verdict, color, emoji = "STRONG BUY", "strong-buy", "🚀"
-    elif score >= 3:
+    elif score >= 4:
         verdict, color, emoji = "BUY", "buy", "✅"
     elif score >= -2:
         verdict, color, emoji = "HOLD", "hold", "⚖️"
-    elif score >= -5:
+    elif score >= -7:
         verdict, color, emoji = "AVOID", "avoid", "⚠️"
     else:
         verdict, color, emoji = "STRONG AVOID", "strong-avoid", "🚫"
@@ -719,9 +1037,11 @@ def get_buy_recommendation(fundamentals: dict, indicators: dict,
         "verdict_color": color,
         "verdict_emoji": emoji,
         "score": score,
-        "max_score": 17,
+        "max_score": 25,
         "bullish_reasons": bullish_reasons,
         "bearish_reasons": bearish_reasons,
+        "red_flags": red_flags,
+        "scorecard": scorecard,
     }
 
 

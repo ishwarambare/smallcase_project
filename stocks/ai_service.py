@@ -70,13 +70,24 @@ If they ask about their personal portfolio and they don't have baskets, let them
 You are a helpful AI investment assistant for a stock portfolio management app called "Smallcase". 
 Your role is to:
 1. Answer questions about the user's investment portfolios and baskets
-2. Provide insights about their stock holdings
+2. Provide insights about their stock holdings using fundamental analysis
 3. Explain investment concepts in simple terms
 4. Help users understand their portfolio performance
 5. Suggest portfolio optimization when asked
 
 IMPORTANT: Only discuss the user's baskets and investments that are provided in the context.
 Do not make up or assume any investment data.
+
+GOLDEN RULES FOR STOCK SELECTION:
+Always keep these fundamental principles in mind when advising or suggesting any stocks or baskets:
+1. Avoid Relying on Tips: Encourage learning fundamental analysis rather than blindly following tips.
+2. Check Revenue & Profit Growth: Ensure both revenue (top line) and net income (bottom line) grow consistently YoY.
+3. Analyze Assets vs. Liabilities: Total assets must be significantly higher than liabilities, with assets increasing over time.
+4. Monitor Cash Flow: Ensure the company has positive and growing Free Cash Flow.
+5. Read Annual Reports: Understand future growth plans by reading reports.
+6. Identify Red Flags: Dropping revenues, negative cash flows, low promoter holdings, and massive debt/liabilities are red flags and should be avoided.
+7. Core Valuation Metrics: Lower P/E (ideally under 20 compared to industry), low P/B (1 or 2 is very good), Debt-to-Equity (ideal below 1.0 or 2.0), and healthy Dividend Yield. Price below Graham Intrinsic Value is undervalued.
+8. Promoter and Institutional Shareholding: High combined holdings by Promoters, DIIs, and FIIs (ideally > 50-60%) is a strong positive signal.
 """
         else:
             role_info = """
@@ -85,7 +96,7 @@ The user does NOT have any investment baskets yet.
 
 Your role is to:
 1. Welcome them and explain how to create a basket
-2. Explain investment concepts in simple terms
+2. Explain investment concepts in simple terms (like fundamental analysis and the 8 Golden Rules of stock selection: revenue/profit growth, assets > liabilities, positive cash flow, low debt-to-equity, price < intrinsic value, high promoter holdings, and avoiding tips/hype)
 3. Help them understand the platform features
 4. Encourage them to create their first investment basket
 
@@ -97,6 +108,10 @@ If they ask about their portfolio, politely let them know they haven't created a
 
 Be friendly, professional, and concise. Use ₹ for Indian Rupees.
 If you don't know something specific, say so and offer to connect them with human support.
+
+GOLDEN RULES OF RETREAT:
+When suggest stock baskets or evaluating specific symbols, always evaluate them against the 8 Golden Rules of Stock Selection (Revenue/Profit Growth, Assets vs Liabilities, Free Cash Flow, Graham Intrinsic Value, P/E & P/B, Debt-to-Equity, Promoter Holdings). Remind the user about the importance of fundamental checklist check.
+
 {baskets_info}
 {total_info}
 
@@ -424,11 +439,21 @@ class StockAnalysisAIService:
         desc    = (fundamentals.get('description') or '')[:500]
         verdict = recommendation.get('verdict', 'HOLD')
         score   = recommendation.get('score', 0)
+        max_score = recommendation.get('max_score', 25)
         bull_r  = '; '.join(recommendation.get('bullish_reasons', [])[:5])
         bear_r  = '; '.join(recommendation.get('bearish_reasons', [])[:5])
         rsi     = indicators.get('rsi', 'N/A')
         sma50s  = indicators.get('sma50_signal', 'N/A')
         macds   = indicators.get('macd_signal', 'N/A')
+        
+        # New scorecard fields
+        rev_g   = fundamentals.get('revenue_growth_yoy', 'N/A')
+        ear_g   = fundamentals.get('earnings_growth_yoy', 'N/A')
+        debt_eq = fundamentals.get('debt_to_equity', 'N/A')
+        fcf     = fundamentals.get('fcf_history', [])
+        fcf_str = fcf[0] if fcf else 'N/A'
+        graham  = fundamentals.get('intrinsic_value', 'N/A')
+        red_f   = '; '.join(recommendation.get('red_flags', [])) or 'None'
 
         prompt = f"""You are a senior equity research analyst. Analyze {symbol} ({fundamentals.get('name', symbol)}) 
 and write a concise, factual 3-section report. Use data provided — do NOT make up numbers.
@@ -437,21 +462,33 @@ STOCK DATA:
 - Sector: {sector}
 - Price: ₹{price} | P/E: {pe} | Fwd P/E: {fwd_pe} | P/B: {pb}
 - Market Cap: {mcap} | EPS: {eps} | Dividend Yield: {div_y} | Beta: {beta}
+- Debt-to-Equity: {debt_eq}
+- YoY Revenue Growth: {rev_g}% | YoY Net Income Growth: {ear_g}%
+- Latest Free Cash Flow: {fcf_str}
+- Graham Intrinsic Value: ₹{graham}
 - RSI: {rsi} | SMA50 trend: {sma50s} | MACD: {macds}
-- AI Score: {score}/17 → Verdict: {verdict}
+- AI Fundamental Score: {score}/{max_score} → Verdict: {verdict}
+- Critical Red Flags: {red_f}
 - Bullish signals: {bull_r}
 - Risk signals: {bear_r}
 - Business: {desc}
+
+GOLDEN RULES CRITERIA FOR EVALUATION:
+1. Growth: Check if both Revenue and Profit are growing consistently YoY.
+2. Stability: Assets should exceed Liabilities. Debt-to-Equity should be under 1.0 or 2.0.
+3. Cash Flow: Free Cash Flow must be positive.
+4. Valuation: Price should ideally be below the Graham Intrinsic Value.
+5. Identify Red Flags (dropping revenue/profit, negative cash flow, massive debt) and highlight them.
 
 Write EXACTLY 3 sections with these headings (use ## heading syntax):
 ## Business Overview
 (2-3 sentences summarizing the company's core business and competitive position)
 
 ## Bullish Signals
-(3-4 bullet points starting with ✅ highlighting the strongest reasons to be optimistic)
+(3-4 bullet points starting with ✅ highlighting the strongest reasons to be optimistic, including growth, FCF, and low valuations if applicable)
 
 ## Key Risks
-(3-4 bullet points starting with ⚠️ highlighting the main risks an investor should watch)
+(3-4 bullet points starting with ⚠️ highlighting the main risks an investor should watch, especially any active Red Flags, dropping metrics, or high debt)
 
 Keep each section concise. Use ₹ for prices. Be factual and balanced."""
 
@@ -563,12 +600,16 @@ Output ONLY the JSON array. No extra text."""
             s = sa.get('symbol', '?')
             rec = sa.get('recommendation', {})
             fund = sa.get('fundamentals', {})
+            fcf = fund.get('fcf_history', [])
+            fcf_val = fcf[0] if fcf else 'N/A'
             stock_summaries.append(
-                f"- {s}: Score {rec.get('score', 0)}/17 ({rec.get('verdict', 'N/A')}), "
-                f"P/E={fund.get('pe_ratio', 'N/A')}, "
-                f"RSI={sa.get('indicators', {}).get('rsi', 'N/A')}, "
-                f"Bullish: {'; '.join(rec.get('bullish_reasons', [])[:2])}, "
-                f"Risks: {'; '.join(rec.get('bearish_reasons', [])[:2])}"
+                f"- {s}: Score {rec.get('score', 0)}/25 ({rec.get('verdict', 'N/A')}), "
+                f"P/E={fund.get('pe_ratio', 'N/A')}, P/B={fund.get('price_to_book', 'N/A')}, "
+                f"YoY Rev Growth={fund.get('revenue_growth_yoy', 'N/A')}%, "
+                f"YoY Profit Growth={fund.get('earnings_growth_yoy', 'N/A')}%, "
+                f"FCF={fcf_val}, Debt/Equity={fund.get('debt_to_equity', 'N/A')}, "
+                f"Graham Intrinsic Value=₹{fund.get('intrinsic_value', 'N/A')}, "
+                f"Red Flags={', '.join(rec.get('red_flags', [])) or 'None'}"
             )
 
         pnl = total_value - total_investment
@@ -588,16 +629,21 @@ INDIVIDUAL STOCK ANALYSIS:
 Generate a comprehensive portfolio intelligence report with these EXACT sections:
 
 ## Portfolio Health Score
-Give an overall score out of 10 and 2-sentence assessment.
+Give an overall score out of 10 and 2-sentence assessment. Evaluate the overall basket against the 8 Golden Rules:
+1. Growing Revenues & Profits
+2. Assets exceed Liabilities
+3. Positive and growing Free Cash Flow
+4. Sound valuations (low P/E, P/B, Debt-to-Equity)
+5. Stock price below Graham Intrinsic Value
 
 ## Top Actions
-List 3-5 specific action items starting with 🔴 REDUCE, 🟡 HOLD, or 🟢 ADD for each relevant stock with reasoning.
+List 3-5 specific action items starting with 🔴 REDUCE, 🟡 HOLD, or 🟢 ADD for each relevant stock with reasoning. Focus heavily on warning users about any stocks with active Red Flags (like dropping revenue/profit, negative cash flow, or high debt).
 
 ## Risk Alerts
-List 2-3 key portfolio-level risks to watch.
+List 2-3 key portfolio-level risks to watch (e.g. concentrations in high-debt stocks, cash-burning companies, or sectors with poor tailwinds).
 
 ## Rebalancing Suggestion
-One paragraph on how to rebalance for better risk-adjusted returns.
+One paragraph on how to rebalance for better risk-adjusted returns based on the fundamental checklist.
 
 ## Market Timing
 One sentence on whether now is a good time to add to this basket given current signals.

@@ -53,12 +53,30 @@ def _extract_pdf_text(file_source) -> str:
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     """
     Generates embedding vectors for a list of texts.
-    Uses local ONNX MiniLM model from chromadb utilities.
+    First tries to use Google Gemini API (models/gemini-embedding-001) if GEMINI_API_KEY is set.
+    Otherwise, falls back to local ONNX MiniLM model from chromadb.
     """
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            response = genai.embed_content(
+                model="models/gemini-embedding-001",
+                content=texts,
+                task_type="retrieval_document",
+            )
+            embeddings = response.get('embedding', [])
+            if embeddings:
+                return [[float(val) for val in emb] for emb in embeddings]
+        except Exception as e:
+            print("failed while embading")
+            logger.warning(f"[RAG] Gemini embedding generation failed, falling back to local ONNX: {e}")
+
+    # Fallback to local ONNX MiniLM
     import chromadb.utils.embedding_functions as ef
     fn = ef.ONNXMiniLM_L6_V2()
     embeddings = fn(texts)
-    # Convert elements to standard Python float lists for JSON compatibility
     return [[float(val) for val in emb] for emb in embeddings]
 
 

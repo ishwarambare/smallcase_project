@@ -38,7 +38,7 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,1
 CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.environ.get(
         'CSRF_TRUSTED_ORIGINS', 
-        'http://localhost:8000,http://127.0.0.1:8000,https://*.railway.app,https://*.up.railway.app,https://ishwarambare.online,https://www.ishwarambare.online'
+        'http://localhost:8000,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.railway.app,https://*.up.railway.app,https://ishwarambare.online,https://www.ishwarambare.online'
     ).split(',') if origin.strip()
 ]
 

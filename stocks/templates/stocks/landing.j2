@@ -1,0 +1,126 @@
+{% extends 'stocks/base.j2' %}
+{% block title %}StockBasket - Modern Investment Platform{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{{ static('css/pages/landing.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="landing-container">
+    <!-- Market Ticker -->
+    <div class="market-ticker-wrap">
+        <div class="market-ticker">
+            <div class="ticker-item"><span class="symbol">BANKEX</span> 64,972.87 <span class="change down">↓ 0.11%</span></div>
+            <div class="ticker-item"><span class="symbol">BSE100</span> 22,348.48 <span class="change up">↑ 0.00%</span></div>
+            <div class="ticker-item"><span class="symbol">CRUDE OIL</span> 6,570.00 <span class="change down">↓ 3.24%</span></div>
+            <div class="ticker-item"><span class="symbol">GOLD</span> 71,200.00 <span class="change up">↑ 0.5%</span></div>
+            <div class="ticker-item"><span class="symbol">NIFTY 50</span> 22,500.25 <span class="change up">↑ 0.3%</span></div>
+            <div class="ticker-item"><span class="symbol">SENSEX</span> 74,100.50 <span class="change down">↓ 0.2%</span></div>
+            <!-- Duplicated for infinite scroll effect -->
+            <div class="ticker-item"><span class="symbol">BANKEX</span> 64,972.87 <span class="change down">↓ 0.11%</span></div>
+            <div class="ticker-item"><span class="symbol">BSE100</span> 22,348.48 <span class="change up">↑ 0.00%</span></div>
+            <div class="ticker-item"><span class="symbol">CRUDE OIL</span> 6,570.00 <span class="change down">↓ 3.24%</span></div>
+            <div class="ticker-item"><span class="symbol">GOLD</span> 71,200.00 <span class="change up">↑ 0.5%</span></div>
+            <div class="ticker-item"><span class="symbol">NIFTY 50</span> 22,500.25 <span class="change up">↑ 0.3%</span></div>
+            <div class="ticker-item"><span class="symbol">SENSEX</span> 74,100.50 <span class="change down">↓ 0.2%</span></div>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">Build Your <span class="gradient-text" id="animated-text" style="display: inline-block; min-width: 180px;">Wealth</span><br>with Smart Baskets</h1>
+            <p class="hero-subtitle">Discover top Indian stocks, create equal-weighted baskets, and track your portfolio effortlessly.</p>
+            
+            <!-- Left Side: Quick Services -->
+            <div class="quick-services-container">
+                <h3>Our Services</h3>
+                <div class="quick-services-grid">
+                    <a href="{{ url('basket_create') }}" class="service-chip card-glass">
+                        <span class="icon">📊</span>
+                        <span class="label">My Basket</span>
+                    </a>
+                    <a href="#" class="service-chip card-glass">
+                        <span class="icon">📰</span>
+                        <span class="label">News</span>
+                    </a>
+                    <a href="#" class="service-chip card-glass">
+                        <span class="icon">🤖</span>
+                        <span class="label">AI Research</span>
+                    </a>
+                    <a href="{{ url('home') }}" class="service-chip card-glass">
+                        <span class="icon">📈</span>
+                        <span class="label">Portfolio</span>
+                    </a>
+                    <a href="#" class="service-chip card-glass">
+                        <span class="icon">🚀</span>
+                        <span class="label">IPO</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Side: Graph -->
+        <div class="hero-visual">
+            <div class="graph-container card-glass">
+                <div class="graph-header">
+                    <h3>Portfolio Growth</h3>
+                    <span class="badge positive">+15.4%</span>
+                </div>
+                <canvas id="landingChart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials-section">
+        <h2 class="section-title">What Our Customers Say</h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card card-glass">
+                <div class="testimonial-content">
+                    <p>"StockBasket completely transformed how I manage my long-term investments. The interface is stunning and easy to use."</p>
+                </div>
+                <div class="testimonial-author">
+                    <div class="avatar" style="background-color: #6366f1;">A</div>
+                    <div>
+                        <div class="author-name">Anjali S.</div>
+                        <div class="author-exp">2 years experience</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial-card card-glass">
+                <div class="testimonial-content">
+                    <p>"I love the equal-weighted basket approach. It simplifies diversification and the AI analytics give me peace of mind."</p>
+                </div>
+                <div class="testimonial-author">
+                    <div class="avatar" style="background-color: #10b981;">R</div>
+                    <div>
+                        <div class="author-name">Rahul M.</div>
+                        <div class="author-exp">5 years experience</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="testimonial-card card-glass">
+                <div class="testimonial-content">
+                    <p>"Best platform for Indian markets! Tracking my portfolio's real-time performance has never been this visually appealing."</p>
+                </div>
+                <div class="testimonial-author">
+                    <div class="avatar" style="background-color: #f43f5e;">P</div>
+                    <div>
+                        <div class="author-name">Priya K.</div>
+                        <div class="author-exp">Beginner</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ static('js/pages/landing.js') }}"></script>
+{% endblock %}

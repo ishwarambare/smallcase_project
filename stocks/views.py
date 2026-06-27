@@ -38,6 +38,14 @@ def ajax_login_required(view_func):
 
 # ============ Stock and Basket Views ============
 
+def landing(request):
+    """Public landing page for the application"""
+    # Fetch some stocks for the display
+    stocks = Stock.objects.all().order_by('symbol')[:6]
+    return render(request, 'stocks/landing.j2', {
+        'stocks': stocks
+    })
+
 # @login_required
 def home(request):
     """Home page showing all stocks and baskets"""

@@ -1,0 +1,315 @@
+/* landing.css - Modern styling for StockBasket Landing Page */
+
+/* Base Landing Variables */
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --hero-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+}
+
+.landing-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* Glassmorphism Card Utility */
+.card-glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: var(--glass-shadow);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-glass:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Hero Section */
+.hero-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4rem;
+    min-height: 60vh;
+}
+
+.hero-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.hero-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.gradient-text {
+    background: var(--hero-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+#animated-text {
+    transition: opacity 0.5s ease;
+}
+
+.hero-subtitle {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 90%;
+    margin-bottom: 0;
+}
+
+/* Left Side: Quick Services */
+.quick-services-container {
+    margin-top: 1rem;
+}
+
+.quick-services-container h3 {
+    font-size: 1.3rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.quick-services-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.service-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 12px;
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 140px;
+    transition: all 0.3s ease;
+}
+
+.service-chip:hover {
+    background: rgba(16, 185, 129, 0.1);
+    transform: translateY(-3px);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.service-chip .icon {
+    font-size: 1.25rem;
+}
+
+.service-chip .label {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+/* Right Side: Graph */
+.hero-visual {
+    flex: 1.2;
+}
+
+.graph-container {
+    padding: 1.5rem;
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+}
+
+.graph-container::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.graph-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+.graph-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.badge {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+#landingChart {
+    position: relative;
+    z-index: 1;
+    width: 100% !important;
+    height: 200px !important;
+}
+
+/* Common Section Title */
+.section-title {
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 3rem;
+}
+
+/* Testimonials Section */
+.testimonials-section {
+    padding-top: 2rem;
+}
+
+.testimonials-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.testimonial-card {
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.testimonial-content {
+    font-size: 1.1rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.testimonial-author {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.author-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.author-exp {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Market Ticker */
+.market-ticker-wrap {
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-top: -1rem;
+    margin-bottom: -1rem;
+    overflow: hidden;
+    background: rgba(16, 185, 129, 0.05);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+    border-top: 1px solid rgba(16, 185, 129, 0.2);
+    padding: 12px 0;
+    white-space: nowrap;
+    display: flex;
+}
+
+.market-ticker {
+    display: flex;
+    animation: ticker 30s linear infinite;
+}
+
+@keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 30px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    font-family: monospace;
+}
+
+.ticker-item .symbol {
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+}
+
+.ticker-item .change.up {
+    color: #10b981;
+}
+
+.ticker-item .change.down {
+    color: #ef4444;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .hero-section {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .hero-content {
+        align-items: center;
+    }
+    
+    .quick-services-container {
+        width: 100%;
+        max-width: 500px;
+    }
+    
+    .hero-visual {
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2.5rem;
+    }
+    
+    .section-title {
+        font-size: 2rem;
+    }
+}

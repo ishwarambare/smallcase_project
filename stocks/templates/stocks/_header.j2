@@ -1,13 +1,8 @@
 <!-- Main Header -->
 <header class="main-header">
     <div class="header-container">
-        <a href="{{ url('home') if request.user.is_authenticated else url('user:login') }}" class="logo">
-            <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="12" width="4" height="9" rx="1" fill="currentColor"/>
-                <rect x="10" y="6" width="4" height="15" rx="1" fill="currentColor"/>
-                <rect x="17" y="9" width="4" height="12" rx="1" fill="currentColor"/>
-            </svg>
-            <span>StockBasket</span>
+        <a href="{{ url('home') if request.user.is_authenticated else url('landing') }}" class="logo">
+            <img src="{{ static('img/logo.png') }}" alt="StockBasket Logo" style="height: 72px; width: auto; object-fit: contain;">
         </a>
 
         {% if request.user.is_authenticated %}
@@ -59,8 +54,8 @@
         {% else %}
         <div class="auth-buttons">
             {% include 'stocks/_theme_toggle.j2' %}
-           {#  <a href="{{ url('user:login') }}" class="btn-text">{{ _('Login') }}</a> #}
-           {# <a href="{{ url('user:signup') }}" class="btn-primary">{{ _('Sign Up') }}</a>  #}
+            <a href="{{ url('user:login') }}" class="btn-text">{{ _('Login') }}</a>
+            <a href="{{ url('user:signup') }}" class="btn-primary" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 500; text-decoration: none;">{{ _('Sign Up') }}</a>
         </div>
         {% endif %}
     </div>

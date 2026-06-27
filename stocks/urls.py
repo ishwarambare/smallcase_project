@@ -5,7 +5,8 @@ from . import views
 
 urlpatterns = [
     # Home and stock management
-    path('', views.home, name='home'),
+    path('', views.landing, name='landing'),
+    path('dashboard/', views.home, name='home'),
     path('stock/<str:symbol>/', views.stock_detail, name='stock_detail'),
     path('populate-stocks/', views.populate_stocks, name='populate_stocks'),
     path('update-prices/', views.update_prices, name='update_prices'),

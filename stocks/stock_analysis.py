@@ -13,8 +13,11 @@ Complete stock intelligence engine:
 
 import math
 import datetime
+import logging
 import yfinance as yf
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +307,53 @@ def get_stock_fundamentals(symbol: str) -> dict:
         }
     except Exception as e:
         print(f"[StockAnalysis] Fundamentals error for {symbol}: {e}")
-        return {"symbol": symbol, "name": symbol, "error": str(e)}
+        logger.warning("Fundamentals failed for %s: %s", symbol, e, exc_info=True)
+        return {
+            "symbol": symbol,
+            "name": symbol,
+            "error": str(e),
+            "current_price": None,
+            "previous_close": None,
+            "open": None,
+            "day_high": None,
+            "day_low": None,
+            "volume": None,
+            "avg_volume": None,
+            "market_cap": None,
+            "pe_ratio": None,
+            "forward_pe": None,
+            "eps": None,
+            "dividend_yield": None,
+            "beta": None,
+            "week_52_high": None,
+            "week_52_low": None,
+            "book_value": None,
+            "price_to_book": None,
+            "sector": "N/A",
+            "industry": "N/A",
+            "description": "",
+            "currency": "INR",
+            "bid": None,
+            "ask": None,
+            "held_pct_institutions": None,
+            "held_pct_insiders": None,
+            "float_shares": None,
+            "shares_outstanding": None,
+            "short_ratio": None,
+            "debt_to_equity": None,
+            "revenue_growth_yoy": None,
+            "earnings_growth_yoy": None,
+            "fcf_positive": None,
+            "fcf_growing": None,
+            "fcf_history": [],
+            "assets_growing": None,
+            "assets_higher_than_liabilities": None,
+            "total_assets": None,
+            "total_liab": None,
+            "assets_history": [],
+            "liabilities_history": [],
+            "intrinsic_value": None,
+        }
 
 
 # ---------------------------------------------------------------------------

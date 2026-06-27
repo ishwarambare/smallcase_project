@@ -138,7 +138,7 @@
             <div class="metric-card">
                 <div class="metric-label">{{ label }}</div>
                 <div class="metric-value {{ cls }}">
-                    {% if value is none %}—
+                    {% if value is not defined or value is none %}—
                     {% elif fmt == 'price' %}₹{{ "%.2f"|format(value) }}
                     {% elif fmt == 'cr' %}
                         {% if value >= 1e12 %}₹{{ "%.2f"|format(value/1e12) }}L Cr

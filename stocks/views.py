@@ -159,7 +159,9 @@ def stock_detail(request, symbol):
             'day_change_pct': day_change_pct,
             'week52_pct': week52_pct,
         }
-        cache.set(cache_key, context, 900)
+        has_error = (fundamentals.get('error') is not None) or (indicators.get('error') is not None) or (quant.get('error') is not None)
+        cache_timeout = 10 if has_error else 900
+        cache.set(cache_key, context, cache_timeout)
 
     return render(request, 'stocks/stock_detail.j2', context)
 

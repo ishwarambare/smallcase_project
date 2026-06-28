@@ -152,45 +152,47 @@ import dj_database_url
 
 def _get_database_config():
     sqlite_db_name = str(BASE_DIR / 'smallcasedb')
-    default_db_url = f'sqlite:///{sqlite_db_name}'
-    database_url = os.environ.get('DATABASE_URL', '').strip()
+    
+    # Check if running on Render, Railway, or another production server
+    is_production = (
+        os.environ.get('PRODUCTION', 'False').lower() in ('true', '1', 'yes') or
+        os.environ.get('RENDER') is not None or
+        os.environ.get('RAILWAY_ENVIRONMENT') is not None or
+        not DEBUG
+    )
 
-    if not database_url:
-        return dj_database_url.config(
-            default=default_db_url,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-
-    parsed = dj_database_url.parse(database_url)
-    if parsed.get('ENGINE') == 'django.db.backends.postgresql':
-        try:
-            import psycopg2
-
-            conn = psycopg2.connect(
-                dbname=parsed.get('NAME'),
-                user=parsed.get('USER'),
-                password=parsed.get('PASSWORD'),
-                host=parsed.get('HOST'),
-                port=parsed.get('PORT'),
-            )
-            conn.close()
+    if not is_production:
+        # Local development - use SQLite by default
+        # If the user has explicitly configured a local PostgreSQL database, we can still use it.
+        database_url = os.environ.get('DATABASE_URL', '').strip()
+        is_local_postgres = 'localhost' in database_url or '127.0.0.1' in database_url
+        
+        if is_local_postgres:
             return dj_database_url.config(
                 default=database_url,
                 conn_max_age=600,
                 conn_health_checks=True,
             )
-        except Exception:
+        else:
             return {
                 'ENGINE': 'django.db.backends.sqlite3',
                 'NAME': sqlite_db_name,
             }
 
-    return dj_database_url.config(
-        default=database_url or default_db_url,
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    # Production environment (Render / Railway / etc.)
+    database_url = os.environ.get('DATABASE_URL', '').strip()
+    if database_url:
+        return dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+
+    # Fallback to SQLite if no DATABASE_URL is set in production
+    return {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': sqlite_db_name,
+    }
 
 
 DATABASES = {

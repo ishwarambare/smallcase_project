@@ -55,8 +55,8 @@ I've successfully implemented **multi-language support** for your Django project
    - `test_i18n.py` - Verifies setup
 
 8. **Documentation**
-   - `docs/MULTI_LANGUAGE_GUIDE.md` - Complete guide
-   - `docs/MULTI_LANGUAGE_README.md` - Implementation summary
+   - `MULTI_LANGUAGE_GUIDE.md` - Complete guide
+   - `MULTI_LANGUAGE_README.md` - Implementation summary
 
 ---
 
@@ -117,8 +117,8 @@ python compile_messages.py
 - ✅ `stocks/templates/stocks/i18n_demo.j2` - Demo page
 - ✅ `compile_messages.py` - Translation compiler
 - ✅ `test_i18n.py` - Test script
-- ✅ `docs/MULTI_LANGUAGE_GUIDE.md` - Complete guide
-- ✅ `docs/MULTI_LANGUAGE_README.md` - Summary
+- ✅ `MULTI_LANGUAGE_GUIDE.md` - Complete guide
+- ✅ `MULTI_LANGUAGE_README.md` - Summary
 
 ---
 
@@ -242,13 +242,13 @@ python compile_messages.py
 ## 📚 Documentation
 
 ### Complete Guides:
-1. **`docs/MULTI_LANGUAGE_GUIDE.md`**
+1. **`MULTI_LANGUAGE_GUIDE.md`**
    - Detailed usage instructions
    - Best practices
    - Troubleshooting
    - Advanced features
 
-2. **`docs/MULTI_LANGUAGE_README.md`**
+2. **`MULTI_LANGUAGE_README.md`**
    - Implementation summary
    - File structure
    - Technical details
@@ -318,7 +318,7 @@ Your Django project now supports **three languages** with a professional, produc
 ## 📞 Support
 
 If you need help:
-1. Check `docs/MULTI_LANGUAGE_GUIDE.md`
+1. Check `MULTI_LANGUAGE_GUIDE.md`
 2. Run `python test_i18n.py` to debug
 3. Review the demo page at `/en/i18n-demo/`
 

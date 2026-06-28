@@ -175,9 +175,9 @@ This project is prepared for deployment on Railway and similar platforms.
 
 ### Railway Quick Links
 
-- [Quick Start Guide](docs/RAILWAY_PRODUCTION_QUICK_START.md)
-- [Deployment Checklist](docs/RAILWAY_CHECKLIST.md)
-- [Detailed Deployment Guide](docs/RAILWAY_DEPLOYMENT.md)
+- [Quick Start Guide](RAILWAY_PRODUCTION_QUICK_START.md)
+- [Deployment Checklist](RAILWAY_CHECKLIST.md)
+- [Detailed Deployment Guide](RAILWAY_DEPLOYMENT.md)
 
 ### Production Notes
 
@@ -190,11 +190,11 @@ This project is prepared for deployment on Railway and similar platforms.
 
 A set of detailed guides is available in the [docs](docs) folder:
 
-- [docs/README.md](docs/README.md)
-- [docs/EMAIL_USERNAME_LOGIN.md](docs/EMAIL_USERNAME_LOGIN.md)
-- [docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md)
-- [docs/MULTI_LANGUAGE_GUIDE.md](docs/MULTI_LANGUAGE_GUIDE.md)
-- [docs/IMPORT_EXPORT_README.md](docs/IMPORT_EXPORT_README.md)
+- [README.md](README.md)
+- [EMAIL_USERNAME_LOGIN.md](EMAIL_USERNAME_LOGIN.md)
+- [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md)
+- [MULTI_LANGUAGE_GUIDE.md](MULTI_LANGUAGE_GUIDE.md)
+- [IMPORT_EXPORT_README.md](IMPORT_EXPORT_README.md)
 
 ## License
 

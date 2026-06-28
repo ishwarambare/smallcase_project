@@ -148,7 +148,7 @@ ContactMessage
 - `user/forms.py` (ContactForm)
 - `stocks/static/js/pages/contact.js` (AJAX handler)
 - `user/migrations/0002_contactmessage.py` (Migration)
-- `docs/CONTACT_FORM_DOCUMENTATION.md` (Full docs)
+- `CONTACT_FORM_DOCUMENTATION.md` (Full docs)
 
 **Modified Files**:
 - `user/models.py` (Added ContactMessage model)
@@ -177,4 +177,4 @@ ContactMessage
 
 **Status**: ✅ Fully Functional  
 **Last Updated**: 2026-01-06  
-**Documentation**: See `docs/CONTACT_FORM_DOCUMENTATION.md`
+**Documentation**: See `CONTACT_FORM_DOCUMENTATION.md`

@@ -290,7 +290,7 @@ Reliability: 99.9%+ (Cloudflare + Gmail)
 
 **Ready to get started?** 
 
-Open: [`CLOUDFLARE_CUSTOM_DOMAIN_GUIDE.md`](file:///c:/Users/ishwa/PycharmProjects/smallcase_project/CLOUDFLARE_CUSTOM_DOMAIN_GUIDE.md)
+Open: [`CLOUDFLARE_CUSTOM_DOMAIN_GUIDE.md`](CLOUDFLARE_CUSTOM_DOMAIN_GUIDE.md)
 
 Follow the step-by-step instructions and you'll have your custom domain live in under an hour!
 

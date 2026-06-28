@@ -8,7 +8,7 @@ You now have **3 comprehensive step-by-step guides** for setting up all authenti
 
 ## 📧 1. Email SMTP Setup Guide
 
-**File**: [`EMAIL_SMTP_SETUP_GUIDE.md`](file:///c:/Users/ishwa/PycharmProjects/smallcase_project/EMAIL_SMTP_SETUP_GUIDE.md)
+**File**: [`EMAIL_SMTP_SETUP_GUIDE.md`](EMAIL_SMTP_SETUP_GUIDE.md)
 
 ### What's Inside:
 ✅ **Gmail SMTP Setup** (Recommended for Development)
@@ -43,7 +43,7 @@ You now have **3 comprehensive step-by-step guides** for setting up all authenti
 
 ## 📱 2. SMS Setup Guide (Twilio)
 
-**File**: [`SMS_SETUP_GUIDE.md`](file:///c:/Users/ishwa/PycharmProjects/smallcase_project/SMS_SETUP_GUIDE.md)
+**File**: [`SMS_SETUP_GUIDE.md`](SMS_SETUP_GUIDE.md)
 
 ### What's Inside:
 ✅ **Twilio SMS Setup** (Recommended - Global)
@@ -79,7 +79,7 @@ You now have **3 comprehensive step-by-step guides** for setting up all authenti
 
 ## 🔐 3. OAuth Setup Guide (Google & GitHub)
 
-**File**: [`OAUTH_SETUP_GUIDE.md`](file:///c:/Users/ishwa/PycharmProjects/smallcase_project/OAUTH_SETUP_GUIDE.md)
+**File**: [`OAUTH_SETUP_GUIDE.md`](OAUTH_SETUP_GUIDE.md)
 
 ### What's Inside:
 ✅ **Google OAuth Setup**

@@ -61,4 +61,4 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 4. Page should reload in selected language
 5. Navigate to other pages - language should persist
 
-For detailed information, see: `docs/LANGUAGE_SWITCHING_FIX.md`
+For detailed information, see: `LANGUAGE_SWITCHING_FIX.md`

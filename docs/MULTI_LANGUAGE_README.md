@@ -63,7 +63,7 @@ Translated **50+ common strings** including:
 - Beautiful UI with animations
 
 ### 9. **Comprehensive Documentation** ✓
-- `docs/MULTI_LANGUAGE_GUIDE.md` - Complete usage guide
+- `MULTI_LANGUAGE_GUIDE.md` - Complete usage guide
 - This README - Implementation summary
 - In-code comments and examples
 
@@ -134,7 +134,7 @@ smallcase_project/
 │
 ├── compile_messages.py             # Translation compiler
 ├── requirements.txt                # Added polib
-└── docs/
+└── 
     └── MULTI_LANGUAGE_GUIDE.md     # Complete guide
 ```
 
@@ -255,7 +255,7 @@ Currently translated:
 
 ## 🎓 Learning Resources
 
-- **Full Guide**: See `docs/MULTI_LANGUAGE_GUIDE.md`
+- **Full Guide**: See `MULTI_LANGUAGE_GUIDE.md`
 - **Django Docs**: https://docs.djangoproject.com/en/stable/topics/i18n/
 - **Demo Page**: Visit `/en/i18n-demo/` to see it in action
 
@@ -292,4 +292,4 @@ Your Django project now supports **English, Hindi, and Marathi**!
 
 ---
 
-For detailed usage instructions, see: `docs/MULTI_LANGUAGE_GUIDE.md`
+For detailed usage instructions, see: `MULTI_LANGUAGE_GUIDE.md`

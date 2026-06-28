@@ -186,7 +186,7 @@ If language switching still doesn't work after deploying:
 ## Related Files Modified
 - ✅ `Dockerfile` - Added gettext + compilemessages
 - ✅ `smallcase_project/settings.py` - Added session configuration
-- 📝 `docs/LANGUAGE_SWITCHING_FIX.md` - This documentation
+- 📝 `LANGUAGE_SWITCHING_FIX.md` - This documentation
 
 ## References
 - [Django i18n Documentation](https://docs.djangoproject.com/en/stable/topics/i18n/)

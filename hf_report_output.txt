@@ -1,0 +1,32 @@
+## Portfolio Health Score: 5.5/10
+
+**Assessment:** The portfolio shows a strong bias toward high-growth small/midcaps with genuine top-line momentum (NETWEB, AVALON, SYRMA lead), but it carries significant fragility — 3 of 8 holdings (ANANTRAJ, KAYNES, MAZDOCK) are actively burning free cash, and 2 (CAMS, MAZDOCK) carry dangerously high leverage (D/E > 4.0). Valuations are uniformly stretched (P/E > 38 for every single name), and **no stock trades below its Graham Intrinsic Value**, violating Golden Rule #5 outright.
+
+**Golden Rules Audit:**
+1. ❌ **Growing Revenues & Profits**: Mixed — 5 names strong, CDSL declining (-13.39%), CAMS flat (1.24%)
+2. ⚠️ **Assets exceed Liabilities**: 2 names FAIL hard (CAMS D/E=4.86, MAZDOCK D/E=4.48)
+3. ❌ **Positive FCF**: 3 of 8 names are cash incinerators (MAZDOCK -₹306Cr, KAYNES -₹184Cr, ANANTRAJ -₹64Cr)
+4. ❌ **Sound valuations**: Every name trades at P/E > 32; median ~60
+5. ❌ **Below Graham Value**: None qualify — premia are aggressive portfolio-wide
+
+---
+
+## 🔴 Top Actions
+
+🔴 **REDUCE MAZDOCK.NS** — Score 0/25 is the portfolio's worst position. Combine *negative FCF of -₹306Cr* with D/E of 4.48 (extreme leverage) and only 7% profit growth on a ₹590 Graham value; this is a textbook value trap. **Cut exposure by 50–70%.**
+
+🔴 **REDUCE CAMS.NS** — Despite a healthy ₹443Cr FCF, the balance sheet is alarming (D/E = **4.86**, near industry worst) and promoter holding is just 3.6% — classic governance/structural risk. Revenue growth of 6.59% does not justify paying 41.8x earnings with ₹15.04 book value multiple. **Trim by 40%.**
+
+🟡 **HOLD CDSL.NS** — Profit is dropping (-13.39% YoY) while the stock still trades at 60x P/E and 14x P/B. Wait for either a price correction toward ₹600 zone (₹214 Graham value suggests deep downside) or a rebound in earnings before adding.
+
+🟡 **HOLD ANANTRAJ.NS & KAYNES.NS** — Both showing respectable top-line growth (21.92% and 33.24%) but **both bleeding cash** (-₹64Cr and -₹184Cr FCF respectively). Question: is this growth-funded or self-funded? **Watch next 2 quarters** — if FCF turns positive hold; if negative deepens, REDUCE.
+
+🟢 **ADD NETWEB.NS** — Portfolio's strongest name (Score 13/25): 90% revenue growth, 81% profit growth, positive FCF of ₹159Cr, low D/E 0.39. Yes, P/E of 137 is rich, but growth meaningfully justifies the premium. **Increase weight by 20%.**
+
+🟢 **ADD SYRMA.NS** — Score 12/25: 87% profit growth, positive FCF of ₹98Cr, clean balance sheet (D/E 0.13). The 85x P/E is steep but defended by execution. **Add on any 10–15% pullback.**
+
+---
+
+## ⚠️ Risk Alerts
+
+1. **Concentration in Cash-Burning Growth Names (37.5%

@@ -1,0 +1,5 @@
+## Portfolio Health Score
+**4/10 - Poor.** This portfolio exhibits a high-risk profile, heavily weighted towards growth stocks with stretched valuations and a concerning number of fundamental red flags. While some holdings show strong growth, the presence of negative Free Cash Flow, massive debt, and dropping profits in several key positions significantly undermines the overall health and stability.
+
+## Top Actions
+*   🔴 **REDUCE ANANTRAJ.NS**: Despite revenue and profit growth, the persistent negative Free

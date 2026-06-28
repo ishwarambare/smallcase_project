@@ -188,6 +188,37 @@ class GeminiProvider(AIProvider):
             return f"I'm having trouble connecting right now. Please try again or contact human support. Error: {str(e)}"
 
 
+class HuggingFaceProvider(AIProvider):
+    """Hugging Face AI Provider using MiniMax-M3 next-gen model"""
+    
+    def __init__(self):
+        from huggingface_hub import InferenceClient
+        api_key = os.environ.get('HUGGINGFACE_API_KEY', '')
+        self.client = InferenceClient(api_key=api_key)
+        self.model = "MiniMaxAI/MiniMax-M3"
+    
+    def generate_response(self, user_message: str, context: dict) -> str:
+        try:
+            system_prompt = self.build_system_prompt(context)
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+            
+            chat_completion = self.client.chat.completions.create(
+                messages=messages,
+                model=self.model,
+                max_tokens=1500,
+            )
+            
+            return chat_completion.choices[0].message.content
+            
+        except Exception as e:
+            print(f"Hugging Face API Error: {e}")
+            return f"I'm having trouble connecting right now. Please try again or contact human support. Error: {str(e)}"
+
+
 class AIService:
     """Main AI Service that manages provider selection"""
     
@@ -205,6 +236,8 @@ class AIService:
         
         if provider_name == 'gemini':
             return GeminiProvider()
+        elif provider_name == 'huggingface':
+            return HuggingFaceProvider()
         else:  # Default to Groq
             return GroqProvider()
     
@@ -378,11 +411,27 @@ class StockAnalysisAIService:
 
     CACHE_TTL = 6 * 60 * 60  # 6 hours
 
-    def _call_llm(self, prompt: str, max_tokens: int = 800) -> str | None:
+    def _call_llm(self, prompt: str, max_tokens: int = 2500) -> str | None:
         """Internal helper — calls the configured LLM provider."""
         provider_name = os.environ.get('AI_PROVIDER', 'groq').lower()
         try:
-            if provider_name == 'gemini':
+            if provider_name == 'huggingface':
+                from huggingface_hub import InferenceClient
+                api_key = os.environ.get('HUGGINGFACE_API_KEY', '')
+                client = InferenceClient(api_key=api_key)
+                
+                messages = [
+                    {"role": "system", "content": "You are a helpful senior financial research analyst and portfolio manager."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                completion = client.chat.completions.create(
+                    model="MiniMaxAI/MiniMax-M3",
+                    messages=messages,
+                    max_tokens=max_tokens
+                )
+                return completion.choices[0].message.content.strip()
+            elif provider_name == 'gemini':
                 import google.generativeai as genai
                 api_key = os.environ.get('GEMINI_API_KEY', '')
                 if not api_key:
@@ -650,7 +699,7 @@ One sentence on whether now is a good time to add to this basket given current s
 
 Be specific, use stock symbols, be direct. Use ₹ for prices."""
 
-        raw = self._call_llm(prompt, max_tokens=800)
+        raw = self._call_llm(prompt, max_tokens=2500)
         if not raw:
             return {
                 "report": None, "cached": False,

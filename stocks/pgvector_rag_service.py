@@ -357,23 +357,48 @@ class PGVectorRAGService:
 
     def _answer_with_llm(self, symbol: str, question: str, context: str) -> str:
         """Calls LLM with retrieved context to answer the question."""
-        from .ai_service import stock_ai_service
+        from huggingface_hub import InferenceClient
+        import os
 
-        prompt = f"""You are a financial research assistant. A user is asking about {symbol} 
-based on official company documents (annual reports, earnings call transcripts, etc.).
+        # Get API key from environment variable, falling back to the user's provided key if not set
+        api_key = os.environ.get("HUGGINGFACE_API_KEY", "")
 
-Use ONLY the provided document excerpts to answer. If the answer is not in the excerpts, 
-say "I couldn't find specific information about this in the available documents."
+        try:
+            client = InferenceClient(api_key=api_key)
+            
+            system_prompt = f"""You are a cutting-edge financial research AI assistant.
+Your task is to answer questions about the stock/company {symbol} based ONLY on the provided official company documents (such as annual reports, financial statements, earnings call transcripts, etc.).
 
-DOCUMENT EXCERPTS:
+Instructions for giving a better answer from the documents:
+1. Rely ONLY on the clear facts directly mentioned in the DOCUMENT EXCERPTS. Do not assume, extrapolate, or make up facts.
+2. Structure your response in a clear, professional, and readable manner. Use bullet points or key sections if appropriate.
+3. Citations: Explicitly cite or mention the source document title/type (e.g., "Annual Report 2024" or "Earnings Call Transcript Q3") when referencing facts from the excerpts.
+4. If the provided excerpts do not contain the information required to answer the user's question, state: "I couldn't find specific information about this in the available documents."
+5. Do not use any external knowledge or general training data about the company {symbol} that is not present in the document excerpts."""
+
+            user_content = f"""DOCUMENT EXCERPTS:
 {context}
 
-USER QUESTION: {question}
+USER QUESTION: {question}"""
 
-Provide a concise, factual answer based on the documents. Mention the source document when relevant."""
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ]
 
-        answer = stock_ai_service._call_llm(prompt, max_tokens=500)
-        return answer or "I'm unable to generate a response right now. Please try again."
+            completion = client.chat.completions.create(
+                model="MiniMaxAI/MiniMax-M3",
+                messages=messages,
+                max_tokens=1000,
+            )
+            
+            answer = completion.choices[0].message.content
+            if answer:
+                return answer.strip()
+        except Exception as e:
+            logger.error(f"[RAG] HuggingFace Inference Client error for {symbol}: {e}", exc_info=True)
+            
+        return "I'm unable to generate a response right now. Please try again."
 
     def list_documents(self, symbol: str) -> list:
         """Returns list of all documents for a symbol from the DB."""

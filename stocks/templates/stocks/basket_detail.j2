@@ -4,6 +4,7 @@
 {% block header %}
     {{ super() }}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 {% endblock %}
 
 {% block css %}
@@ -248,12 +249,24 @@ async function runPortfolioAgent() {
 
         // Show report in modal
         if (data.report) {
-            const formattedReport = data.report
-                .replace(/## (.*)/g, '<h3 class="agent-report-heading">$1</h3>')
-                .replace(/🔴 (.*)/g, '<div class="agent-action reduce">🔴 $1</div>')
-                .replace(/🟡 (.*)/g, '<div class="agent-action hold">🟡 $1</div>')
-                .replace(/🟢 (.*)/g, '<div class="agent-action add">🟢 $1</div>')
-                .replace(/\n/g, '<br>');
+            let formattedReport = marked.parse(data.report);
+            
+            // Map headers to class
+            formattedReport = formattedReport
+                .replace(/<h2(.*?)>(.*?)<\/h2>/g, '<h3 class="agent-report-heading"$1>$2</h3>')
+                .replace(/<h3(.*?)>(.*?)<\/h3>/g, '<h3 class="agent-report-heading"$1>$2</h3>');
+                
+            // Inject CSS classes for action items inside lists
+            formattedReport = formattedReport
+                .replace(/<li>🔴 (.*?)<\/li>/g, '<li class="agent-action reduce">🔴 $1</li>')
+                .replace(/<li>🟡 (.*?)<\/li>/g, '<li class="agent-action hold">🟡 $1</li>')
+                .replace(/<li>🟢 (.*?)<\/li>/g, '<li class="agent-action add">🟢 $1</li>');
+
+            // Inject CSS classes for action items inside paragraphs/other elements (if any)
+            formattedReport = formattedReport
+                .replace(/<p>🔴 (.*?)<\/p>/g, '<div class="agent-action reduce"><p>🔴 $1</p></div>')
+                .replace(/<p>🟡 (.*?)<\/p>/g, '<div class="agent-action hold"><p>🟡 $1</p></div>')
+                .replace(/<p>🟢 (.*?)<\/p>/g, '<div class="agent-action add"><p>🟢 $1</p></div>');
 
             modalBody.innerHTML = `
                 <div class="agent-report-meta">

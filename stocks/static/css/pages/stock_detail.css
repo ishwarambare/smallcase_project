@@ -1491,7 +1491,123 @@
     border-bottom-left-radius: 4px;
 }
 
-.rag-answer { color: var(--text-primary); }
+.rag-answer {
+    color: var(--text-primary);
+}
+
+.rag-answer h1, .rag-answer h2, .rag-answer h3, .rag-answer h4 {
+    color: var(--text-primary);
+    margin-top: 14px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.rag-answer h1 { font-size: 1.2rem; }
+.rag-answer h2 { font-size: 1.05rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; }
+.rag-answer h3 { font-size: 0.95rem; }
+.rag-answer h4 { font-size: 0.85rem; }
+
+.rag-answer p {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.rag-answer ul, .rag-answer ol {
+    margin-bottom: 10px;
+    padding-left: 20px;
+}
+
+.rag-answer li {
+    margin-bottom: 4px;
+    list-style-position: outside;
+}
+
+/* Responsive Table Wrapper */
+.rag-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    margin: 16px 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="light"] .rag-table-wrapper {
+    border-color: rgba(0, 0, 0, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.rag-answer table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    font-size: 0.82rem;
+    background: var(--card-bg);
+}
+
+.rag-answer th, .rag-answer td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+    border-right: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--text-primary);
+}
+
+:root[data-theme="light"] .rag-answer th,
+:root[data-theme="light"] .rag-answer td {
+    border-bottom-color: rgba(0, 0, 0, 0.15);
+    border-right-color: rgba(0, 0, 0, 0.15);
+}
+
+.rag-answer th:last-child, .rag-answer td:last-child {
+    border-right: none;
+}
+
+.rag-answer th {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.25));
+    font-weight: 700;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.5);
+}
+
+:root[data-theme="light"] .rag-answer th {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+    border-bottom-color: rgba(99, 102, 241, 0.3);
+}
+
+.rag-answer tr:last-child td {
+    border-bottom: none;
+}
+
+/* Zebra Striping & Hover */
+.rag-answer tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.rag-answer tr:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:root[data-theme="light"] .rag-answer tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+:root[data-theme="light"] .rag-answer tr:hover {
+    background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.rag-answer code {
+    background: rgba(99, 102, 241, 0.12);
+    color: #e0e7ff;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85em;
+}
+
+:root[data-theme="light"] .rag-answer code {
+    color: #312e81;
+    background: rgba(99, 102, 241, 0.08);
+}
+
 .rag-sources { margin-top: 8px; font-size: 0.72rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 6px; }
 
 /* Thinking dots */

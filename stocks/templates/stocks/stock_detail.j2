@@ -4,6 +4,7 @@
 {% block header %}
     {{ super() }}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 {% endblock %}
 
 {% block css %}
@@ -1277,7 +1278,23 @@ async function sendRagQuery() {
         aiBubble.className = 'rag-msg ai-msg';
 
         if (data.success) {
-            let html = `<div class="rag-answer">${data.answer.replace(/\n/g, '<br>')}</div>`;
+            // Parse markdown to HTML
+            const parsedHtml = marked.parse(data.answer);
+            
+            // Create a temporary element to manipulate the DOM
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = parsedHtml;
+            
+            // Wrap all tables in a responsive wrapper
+            const tables = tempDiv.querySelectorAll('table');
+            tables.forEach(table => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'rag-table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+            
+            let html = `<div class="rag-answer">${tempDiv.innerHTML}</div>`;
             if (data.sources && data.sources.length) {
                 html += `<div class="rag-sources">📎 Sources: ${data.sources.map(s => `<em>${s.title}</em>`).join(', ')}</div>`;
             }

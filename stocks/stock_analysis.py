@@ -198,6 +198,7 @@ def get_stock_fundamentals(symbol: str) -> dict:
             return _safe(info.get(key, default), default)
 
         # Get financials, balance sheet and cashflow data
+        hist_1y = None
         revenue_growth_yoy = None
         earnings_growth_yoy = None
         fcf_positive = None
@@ -341,15 +342,21 @@ def get_stock_fundamentals(symbol: str) -> dict:
                 pass
 
         # Fallback Dividend Yield
+        from django.core.cache import cache
         div_yield = s("dividendYield")
         if div_yield is None and current_price and current_price > 0:
-            try:
-                hist_1y = ticker.history(period="1y")
-                if hist_1y is not None and not hist_1y.empty and "Dividends" in hist_1y.columns:
-                    total_div = float(hist_1y["Dividends"].sum())
-                    div_yield = round(total_div / current_price, 4)
-            except Exception:
-                pass
+            div_yield_cache_key = f"fallback_div_yield_{symbol}"
+            div_yield = cache.get(div_yield_cache_key)
+            if div_yield is None:
+                try:
+                    if hist_1y is None or hist_1y.empty:
+                        hist_1y = ticker.history(period="1y")
+                    if hist_1y is not None and not hist_1y.empty and "Dividends" in hist_1y.columns:
+                        total_div = float(hist_1y["Dividends"].sum())
+                        div_yield = round(total_div / current_price, 4)
+                        cache.set(div_yield_cache_key, div_yield, 86400) # Cache for 24 hours
+                except Exception:
+                    pass
 
         # Fallback Forward P/E Ratio
         forward_pe = s("forwardPE")
@@ -368,22 +375,42 @@ def get_stock_fundamentals(symbol: str) -> dict:
         # Fallback Beta
         beta = s("beta")
         if beta is None and current_price:
-            try:
-                index_ticker = "^NSEI" if symbol.endswith(".NS") or symbol.endswith(".BO") else "^GSPC"
-                df_stock = yf.download(symbol, period="1y", interval="1d", progress=False, auto_adjust=True)
-                df_index = yf.download(index_ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
-                if df_stock is not None and not df_stock.empty and df_index is not None and not df_index.empty:
-                    close_stock = _get_close_series(df_stock)
-                    close_index = _get_close_series(df_index)
-                    df_aligned = pd.concat([close_stock, close_index], axis=1, keys=["stock", "index"]).dropna()
-                    if len(df_aligned) > 30:
-                        returns = df_aligned.pct_change().dropna()
-                        covariance = returns["stock"].cov(returns["index"])
-                        index_variance = returns["index"].var()
-                        if index_variance > 0:
-                            beta = round(float(covariance / index_variance), 2)
-            except Exception as be:
-                print(f"[StockAnalysis] Error calculating fallback beta for {symbol}: {be}")
+            beta_cache_key = f"fallback_beta_{symbol}"
+            beta = cache.get(beta_cache_key)
+            if beta is None:
+                try:
+                    if hist_1y is None or hist_1y.empty:
+                        hist_1y = ticker.history(period="1y")
+                    if hist_1y is not None and not hist_1y.empty and "Close" in hist_1y.columns:
+                        index_ticker = "^NSEI" if symbol.endswith(".NS") or symbol.endswith(".BO") else "^GSPC"
+                        
+                        # Get index returns from cache
+                        index_returns_cache_key = f"fallback_index_returns_{index_ticker}"
+                        index_returns = cache.get(index_returns_cache_key)
+                        if index_returns is None:
+                            try:
+                                df_index = yf.download(index_ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+                                if df_index is not None and not df_index.empty:
+                                    close_index = _get_close_series(df_index)
+                                    close_index.index = close_index.index.tz_localize(None)
+                                    index_returns = close_index.pct_change().dropna()
+                                    cache.set(index_returns_cache_key, index_returns, 86400) # Cache for 24 hours
+                            except Exception as ie_err:
+                                print(f"[StockAnalysis] Error downloading index returns: {ie_err}")
+                        
+                        if index_returns is not None and not index_returns.empty:
+                            close_stock = hist_1y["Close"].dropna()
+                            close_stock.index = close_stock.index.tz_localize(None)
+                            df_aligned = pd.concat([close_stock, index_returns], axis=1, keys=["stock", "index"]).dropna()
+                            if len(df_aligned) > 30:
+                                returns = df_aligned.pct_change().dropna()
+                                covariance = returns["stock"].cov(returns["index"])
+                                index_variance = returns["index"].var()
+                                if index_variance > 0:
+                                    beta = round(float(covariance / index_variance), 2)
+                                    cache.set(beta_cache_key, beta, 86400) # Cache for 24 hours
+                except Exception as be:
+                    print(f"[StockAnalysis] Error calculating fallback beta for {symbol}: {be}")
 
         # Intrinsic value via Graham Number
         if eps_val and bv_val and eps_val > 0 and bv_val > 0:

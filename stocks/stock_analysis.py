@@ -384,24 +384,24 @@ def get_stock_fundamentals(symbol: str) -> dict:
                     if hist_1y is not None and not hist_1y.empty and "Close" in hist_1y.columns:
                         index_ticker = "^NSEI" if symbol.endswith(".NS") or symbol.endswith(".BO") else "^GSPC"
                         
-                        # Get index returns from cache
-                        index_returns_cache_key = f"fallback_index_returns_{index_ticker}"
-                        index_returns = cache.get(index_returns_cache_key)
-                        if index_returns is None:
+                        # Get index close from cache
+                        index_close_cache_key = f"fallback_index_close_{index_ticker}"
+                        index_close = cache.get(index_close_cache_key)
+                        if index_close is None:
                             try:
                                 df_index = yf.download(index_ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
                                 if df_index is not None and not df_index.empty:
                                     close_index = _get_close_series(df_index)
                                     close_index.index = close_index.index.tz_localize(None)
-                                    index_returns = close_index.pct_change().dropna()
-                                    cache.set(index_returns_cache_key, index_returns, 86400) # Cache for 24 hours
+                                    index_close = close_index
+                                    cache.set(index_close_cache_key, index_close, 86400) # Cache for 24 hours
                             except Exception as ie_err:
-                                print(f"[StockAnalysis] Error downloading index returns: {ie_err}")
+                                print(f"[StockAnalysis] Error downloading index close: {ie_err}")
                         
-                        if index_returns is not None and not index_returns.empty:
+                        if index_close is not None and not index_close.empty:
                             close_stock = hist_1y["Close"].dropna()
                             close_stock.index = close_stock.index.tz_localize(None)
-                            df_aligned = pd.concat([close_stock, index_returns], axis=1, keys=["stock", "index"]).dropna()
+                            df_aligned = pd.concat([close_stock, index_close], axis=1, keys=["stock", "index"]).dropna()
                             if len(df_aligned) > 30:
                                 returns = df_aligned.pct_change().dropna()
                                 covariance = returns["stock"].cov(returns["index"])

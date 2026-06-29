@@ -330,6 +330,40 @@ def get_stock_fundamentals(symbol: str) -> dict:
             except Exception:
                 pass
 
+        # Fallback Forward P/E Ratio
+        forward_pe = s("forwardPE")
+        if forward_pe is None:
+            if pe_ratio is not None:
+                if earnings_growth_yoy is not None and earnings_growth_yoy > -50 and earnings_growth_yoy < 100:
+                    try:
+                        forward_eps = eps_val * (1 + earnings_growth_yoy / 100)
+                        if forward_eps > 0:
+                            forward_pe = round(current_price / forward_eps, 2)
+                    except Exception:
+                        pass
+                if forward_pe is None:
+                    forward_pe = pe_ratio
+
+        # Fallback Beta
+        beta = s("beta")
+        if beta is None and current_price:
+            try:
+                index_ticker = "^NSEI" if symbol.endswith(".NS") or symbol.endswith(".BO") else "^GSPC"
+                df_stock = yf.download(symbol, period="1y", interval="1d", progress=False, auto_adjust=True)
+                df_index = yf.download(index_ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+                if df_stock is not None and not df_stock.empty and df_index is not None and not df_index.empty:
+                    close_stock = _get_close_series(df_stock)
+                    close_index = _get_close_series(df_index)
+                    df_aligned = pd.concat([close_stock, close_index], axis=1, keys=["stock", "index"]).dropna()
+                    if len(df_aligned) > 30:
+                        returns = df_aligned.pct_change().dropna()
+                        covariance = returns["stock"].cov(returns["index"])
+                        index_variance = returns["index"].var()
+                        if index_variance > 0:
+                            beta = round(float(covariance / index_variance), 2)
+            except Exception as be:
+                print(f"[StockAnalysis] Error calculating fallback beta for {symbol}: {be}")
+
         # Intrinsic value via Graham Number
         if eps_val and bv_val and eps_val > 0 and bv_val > 0:
             try:
@@ -353,10 +387,10 @@ def get_stock_fundamentals(symbol: str) -> dict:
             "avg_volume": s("averageVolume"),
             "market_cap": s("marketCap"),
             "pe_ratio": pe_ratio,
-            "forward_pe": s("forwardPE"),
+            "forward_pe": forward_pe,
             "eps": eps_val,
             "dividend_yield": div_yield,
-            "beta": s("beta"),
+            "beta": beta,
             "week_52_high": s("fiftyTwoWeekHigh"),
             "week_52_low": s("fiftyTwoWeekLow"),
             "book_value": bv_val,

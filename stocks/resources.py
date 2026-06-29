@@ -8,7 +8,6 @@ from .models import (
 )
 from django.contrib.auth import get_user_model
 import yfinance as yf
-from .utils import get_yfinance_ticker
 from decimal import Decimal
 
 User = get_user_model()
@@ -53,7 +52,7 @@ class StockResource(resources.ModelResource):
     def _fetch_stock_data(self, symbol):
         """Fetch stock information from yfinance"""
         try:
-            stock = get_yfinance_ticker(symbol)
+            stock = yf.Ticker(symbol)
             try:
                 info = stock.info or {}
             except Exception as ie:

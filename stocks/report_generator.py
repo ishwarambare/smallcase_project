@@ -5,7 +5,6 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 import yfinance as yf
-from .utils import get_yfinance_ticker
 import pandas as pd
 import numpy as np
 
@@ -75,7 +74,7 @@ def fetch_stock_report_data(symbol: str) -> dict:
     }
     
     try:
-        ticker = get_yfinance_ticker(symbol)
+        ticker = yf.Ticker(symbol)
         try:
             info = ticker.info or {}
         except Exception as ie:

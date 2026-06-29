@@ -15,7 +15,6 @@ from .resources import (
 )
 import pandas as pd
 import yfinance as yf
-from .utils import get_yfinance_ticker
 from decimal import Decimal
 from datetime import datetime
 
@@ -184,7 +183,7 @@ class StockAdmin(ImportExportModelAdmin):
     def fetch_stock_info(self, symbol):
         """Fetch stock information from yfinance (used by legacy import)"""
         try:
-            stock = get_yfinance_ticker(symbol)
+            stock = yf.Ticker(symbol)
             try:
                 info = stock.info or {}
             except Exception as ie:

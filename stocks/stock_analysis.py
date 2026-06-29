@@ -16,7 +16,6 @@ import datetime
 import logging
 import yfinance as yf
 import pandas as pd
-from .utils import get_yfinance_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +141,8 @@ def _pct_change_5d(symbol: str) -> float | None:
 def get_stock_fundamentals(symbol: str) -> dict:
     """Fetch key fundamental data from Yahoo Finance."""
     try:
-        ticker = get_yfinance_ticker(symbol)
+        ticker = yf.Ticker(symbol)
+
         try:
             info = ticker.info or {}
         except Exception as ie:
@@ -150,7 +150,6 @@ def get_stock_fundamentals(symbol: str) -> dict:
             logger.warning("Info fetch failed for %s: %s, attempting fast_info fallback", symbol, ie)
             try:
                 finfo = ticker.fast_info
-                
                 # Fetch major holders for institutional/insider ownership fallback
                 held_pct_insiders = None
                 held_pct_institutions = None
@@ -623,7 +622,7 @@ def get_news_sentiment(symbol: str) -> dict:
         "neutral_count": 0,
     }
     try:
-        ticker = get_yfinance_ticker(symbol)
+        ticker = yf.Ticker(symbol)
         raw_news = ticker.news or []
 
         pos_count = 0
@@ -1285,7 +1284,7 @@ def get_quant_metrics(symbol: str) -> dict:
     }
     try:
         import numpy as np
-        ticker = get_yfinance_ticker(symbol)
+        ticker = yf.Ticker(symbol)
 
         # --- Sharpe & Sortino from 1-year daily returns ---
         df = yf.download(symbol, period="1y", auto_adjust=True, progress=False)

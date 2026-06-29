@@ -4,18 +4,6 @@ import yfinance as yf
 from decimal import Decimal
 from .models import Stock
 
-def get_yfinance_ticker(symbol: str) -> yf.Ticker:
-    """Return a yfinance Ticker initialized with a curl_cffi Session for rate-limit bypass."""
-    try:
-        from curl_cffi.requests import Session as CurlSession
-        session = CurlSession(impersonate="chrome")
-        return yf.Ticker(symbol, session=session)
-    except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("Failed to initialize curl_cffi session for %s: %s. Falling back to default Ticker.", symbol, e)
-        return yf.Ticker(symbol)
-
 # Popular Indian stocks (NSE symbols - add .NS suffix for yfinance)
 INDIAN_STOCKS = {
     'RELIANCE.NS': 'Reliance Industries',
@@ -233,7 +221,7 @@ def fetch_stock_price(symbol):
     Returns price or None if failed
     """
     try:
-        stock = get_yfinance_ticker(symbol)
+        stock = yf.Ticker(symbol)
         data = stock.history(period='1d')
         if not data.empty:
             return float(data['Close'].iloc[-1])

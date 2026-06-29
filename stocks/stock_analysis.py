@@ -149,6 +149,24 @@ def get_stock_fundamentals(symbol: str) -> dict:
             logger.warning("Info fetch failed for %s: %s, attempting fast_info fallback", symbol, ie)
             try:
                 finfo = ticker.fast_info
+                
+                # Fetch major holders for institutional/insider ownership fallback
+                held_pct_insiders = None
+                held_pct_institutions = None
+                try:
+                    mh = ticker.major_holders
+                    if mh is not None and not mh.empty:
+                        mh_dict = mh.to_dict().get('Value', {})
+                        held_pct_insiders = mh_dict.get('insidersPercentHeld')
+                        held_pct_institutions = mh_dict.get('institutionsPercentHeld')
+                except Exception as mhe:
+                    print(f"[StockAnalysis] Failed to fetch major holders for {symbol}: {mhe}")
+                
+                # Calculate fallback float shares
+                float_shares = None
+                if finfo.shares and held_pct_insiders is not None:
+                    float_shares = finfo.shares * (1 - held_pct_insiders)
+                
                 info = {
                     "currentPrice": finfo.last_price,
                     "regularMarketPrice": finfo.last_price,
@@ -167,6 +185,9 @@ def get_stock_fundamentals(symbol: str) -> dict:
                     "fiftyTwoWeekHigh": finfo.year_high,
                     "fiftyTwoWeekLow": finfo.year_low,
                     "currency": finfo.currency,
+                    "heldPercentInsiders": held_pct_insiders,
+                    "heldPercentInstitutions": held_pct_institutions,
+                    "floatShares": float_shares,
                 }
             except Exception as fie:
                 print(f"[StockAnalysis] fast_info fallback failed for {symbol}: {fie}")

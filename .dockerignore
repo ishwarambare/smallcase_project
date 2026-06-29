@@ -1,0 +1,14 @@
+.env
+.env.template
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.idea
+db.sqlite3
+smallcasedb
+staticfiles
+chroma_db
+*.pdf
+*.csv

@@ -276,9 +276,61 @@ def get_stock_fundamentals(symbol: str) -> dict:
                 if len(fcf_list) >= 2:
                     fcf_growing = fcf_list[0] > fcf_list[1]
 
-        # 4. Intrinsic value via Graham Number
-        eps_val = info.get("trailingEps")
-        bv_val = info.get("bookValue")
+        # 4. Fallback calculation for missing fundamental ratios (e.g. under info rate limits)
+        eps_val = s("trailingEps")
+        shares_outstanding = s("sharesOutstanding")
+        
+        # Fallback EPS
+        if eps_val is None and financials is not None and not financials.empty and shares_outstanding:
+            try:
+                net_income = None
+                for idx in financials.index:
+                    if idx.lower() == 'net income':
+                        net_income = financials.loc[idx].dropna().tolist()[0]
+                        break
+                if net_income:
+                    eps_val = round(net_income / shares_outstanding, 2)
+            except Exception:
+                pass
+
+        # Fallback P/E Ratio
+        pe_ratio = s("trailingPE")
+        current_price = s("currentPrice") or s("regularMarketPrice")
+        if pe_ratio is None and current_price and eps_val and eps_val > 0:
+            try:
+                pe_ratio = round(current_price / eps_val, 2)
+            except Exception:
+                pass
+
+        # Fallback Book Value
+        bv_val = s("bookValue")
+        if bv_val is None and balance_sheet is not None and not balance_sheet.empty and shares_outstanding:
+            try:
+                if total_assets is not None and total_liab is not None:
+                    bv_val = round((total_assets - total_liab) / shares_outstanding, 2)
+            except Exception:
+                pass
+
+        # Fallback Price/Book
+        pb_ratio = s("priceToBook")
+        if pb_ratio is None and current_price and bv_val and bv_val > 0:
+            try:
+                pb_ratio = round(current_price / bv_val, 2)
+            except Exception:
+                pass
+
+        # Fallback Dividend Yield
+        div_yield = s("dividendYield")
+        if div_yield is None and current_price and current_price > 0:
+            try:
+                hist_1y = ticker.history(period="1y")
+                if hist_1y is not None and not hist_1y.empty and "Dividends" in hist_1y.columns:
+                    total_div = float(hist_1y["Dividends"].sum())
+                    div_yield = round(total_div / current_price, 4)
+            except Exception:
+                pass
+
+        # Intrinsic value via Graham Number
         if eps_val and bv_val and eps_val > 0 and bv_val > 0:
             try:
                 intrinsic_value = round(math.sqrt(22.5 * float(eps_val) * float(bv_val)), 2)
@@ -292,7 +344,7 @@ def get_stock_fundamentals(symbol: str) -> dict:
         return {
             "symbol": symbol,
             "name": s("longName") or s("shortName") or symbol,
-            "current_price": s("currentPrice") or s("regularMarketPrice"),
+            "current_price": current_price,
             "previous_close": s("previousClose"),
             "open": s("open") or s("regularMarketOpen"),
             "day_high": s("dayHigh") or s("regularMarketDayHigh"),
@@ -300,15 +352,15 @@ def get_stock_fundamentals(symbol: str) -> dict:
             "volume": s("volume") or s("regularMarketVolume"),
             "avg_volume": s("averageVolume"),
             "market_cap": s("marketCap"),
-            "pe_ratio": s("trailingPE"),
+            "pe_ratio": pe_ratio,
             "forward_pe": s("forwardPE"),
-            "eps": s("trailingEps"),
-            "dividend_yield": s("dividendYield"),
+            "eps": eps_val,
+            "dividend_yield": div_yield,
             "beta": s("beta"),
             "week_52_high": s("fiftyTwoWeekHigh"),
             "week_52_low": s("fiftyTwoWeekLow"),
-            "book_value": s("bookValue"),
-            "price_to_book": s("priceToBook"),
+            "book_value": bv_val,
+            "price_to_book": pb_ratio,
             "sector": s("sector", "N/A"),
             "industry": s("industry", "N/A"),
             "description": s("longBusinessSummary", ""),

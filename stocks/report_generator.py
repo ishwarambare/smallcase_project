@@ -75,7 +75,28 @@ def fetch_stock_report_data(symbol: str) -> dict:
     
     try:
         ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
+        try:
+            info = ticker.info or {}
+        except Exception as ie:
+            print(f"[ReportGenerator] Info fetch failed for {symbol}: {ie}")
+            logger.warning("Info fetch failed for %s: %s, attempting fast_info fallback", symbol, ie)
+            try:
+                finfo = ticker.fast_info
+                info = {
+                    "longName": symbol.split('.')[0],
+                    "sector": "N/A",
+                    "industry": "N/A",
+                    "longBusinessSummary": "No business description available.",
+                    "website": "N/A",
+                    "currentPrice": finfo.last_price,
+                    "regularMarketPrice": finfo.last_price,
+                    "marketCap": finfo.market_cap,
+                    "fiftyTwoWeekHigh": finfo.year_high,
+                    "fiftyTwoWeekLow": finfo.year_low,
+                }
+            except Exception as fie:
+                print(f"[ReportGenerator] fast_info fallback failed for {symbol}: {fie}")
+                info = {}
         
         data["name"] = info.get("longName") or info.get("shortName") or symbol
         data["sector"] = info.get("sector", "N/A")

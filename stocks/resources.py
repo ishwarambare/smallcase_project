@@ -53,22 +53,36 @@ class StockResource(resources.ModelResource):
         """Fetch stock information from yfinance"""
         try:
             stock = yf.Ticker(symbol)
-            info = stock.info
+            try:
+                info = stock.info or {}
+            except Exception as ie:
+                print(f"Info fetch failed for {symbol}: {ie}")
+                info = {}
             
             # Get current price
             current_price = None
-            if 'currentPrice' in info:
+            if info and 'currentPrice' in info:
                 current_price = info['currentPrice']
-            elif 'regularMarketPrice' in info:
+            elif info and 'regularMarketPrice' in info:
                 current_price = info['regularMarketPrice']
             else:
-                # Try to get from history
-                hist = stock.history(period='1d')
-                if not hist.empty:
-                    current_price = float(hist['Close'].iloc[-1])
+                # Try to get from fast_info
+                try:
+                    finfo = stock.fast_info
+                    current_price = finfo.last_price
+                except Exception as fie:
+                    print(f"fast_info fetch failed for {symbol}: {fie}")
+                
+                # Try to get from history if still None
+                if not current_price:
+                    hist = stock.history(period='1d')
+                    if not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
             
             # Get company name
-            name = info.get('longName') or info.get('shortName') or symbol.split('.')[0]
+            name = info.get('longName') or info.get('shortName') if info else None
+            if not name:
+                name = symbol.split('.')[0]
             
             if current_price:
                 return {

@@ -142,7 +142,36 @@ def get_stock_fundamentals(symbol: str) -> dict:
     """Fetch key fundamental data from Yahoo Finance."""
     try:
         ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
+        try:
+            info = ticker.info or {}
+        except Exception as ie:
+            print(f"[StockAnalysis] Info fetch failed for {symbol}: {ie}")
+            logger.warning("Info fetch failed for %s: %s, attempting fast_info fallback", symbol, ie)
+            try:
+                finfo = ticker.fast_info
+                info = {
+                    "currentPrice": finfo.last_price,
+                    "regularMarketPrice": finfo.last_price,
+                    "previousClose": finfo.previous_close,
+                    "open": finfo.open,
+                    "regularMarketOpen": finfo.open,
+                    "dayHigh": finfo.day_high,
+                    "regularMarketDayHigh": finfo.day_high,
+                    "dayLow": finfo.day_low,
+                    "regularMarketDayLow": finfo.day_low,
+                    "volume": finfo.last_volume,
+                    "regularMarketVolume": finfo.last_volume,
+                    "averageVolume": finfo.three_month_average_volume,
+                    "marketCap": finfo.market_cap,
+                    "sharesOutstanding": finfo.shares,
+                    "fiftyTwoWeekHigh": finfo.year_high,
+                    "fiftyTwoWeekLow": finfo.year_low,
+                    "currency": finfo.currency,
+                }
+            except Exception as fie:
+                print(f"[StockAnalysis] fast_info fallback failed for {symbol}: {fie}")
+                logger.error("fast_info fallback failed for %s: %s", symbol, fie)
+                info = {}
 
         def s(key, default=None):
             return _safe(info.get(key, default), default)

@@ -67,6 +67,35 @@ urlpatterns = [
     path('basket/<int:basket_id>/share/', views.create_tiny_url, name='create_tiny_url'),
     path('s/<str:short_code>/', views.redirect_tiny_url, name='redirect_tiny_url'),
     path('s/<str:short_code>/stats/', views.tiny_url_stats, name='tiny_url_stats'),
+
+    # ─── Real-Time Market Data ────────────────────────────────────────────────
+    # Dashboard (UI)
+    path('market/', views.market_dashboard, name='market_dashboard'),
+
+    # Fyers postback webhook — register this URL in Fyers API dashboard
+    # e.g. https://yourdomain.com/api/webhook/fyers/
+    path('api/webhook/fyers/', views.fyers_postback_webhook, name='fyers_postback_webhook'),
+
+    # REST API — latest tick(s) from DB (for page-load init before WS connects)
+    path('api/market/ticks/', views.market_tick_api, name='market_ticks_api'),
+    path('api/market/tick/<str:symbol>/', views.market_tick_api, name='market_tick_api'),
+
+    # DhanHQ candles API — seeds the chart with historical intraday OHLCV
+    # GET /api/market/candles/<SYMBOL>/          → intraday (today)
+    # GET /api/market/candles/<SYMBOL>/daily/    → daily OHLCV (last 90 days)
+    path('api/market/candles/<str:symbol>/', views.dhan_candles_api, name='dhan_candles_api'),
+    path('api/market/candles/<str:symbol>/daily/', views.dhan_daily_candles_api, name='dhan_daily_candles_api'),
+
+    # Fyers historical candles API (requires FYERS_ACCESS_TOKEN)
+    # GET /api/market/fyers/candles/<SYMBOL>/    → 1-min candles (today)
+    # GET /api/market/fyers/candles/<SYMBOL>/?resolution=15&days=30
+    path('api/market/fyers/candles/<str:symbol>/', views.fyers_candles_api, name='fyers_candles_api'),
+
+    # Fyers OAuth helpers
+    # GET  /api/fyers/auth-url/  → returns login URL
+    # POST /api/fyers/callback/  → exchanges auth_code for access_token
+    path('api/fyers/auth-url/', views.fyers_auth_url, name='fyers_auth_url'),
+    path('api/fyers/callback/', views.fyers_auth_callback, name='fyers_auth_callback'),
 ]
 
 

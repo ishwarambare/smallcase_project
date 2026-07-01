@@ -13,12 +13,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+env_path = BASE_DIR / '.env'
+load_dotenv(env_path, override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -522,3 +523,21 @@ MAX_OTP_ATTEMPTS = 3
 # OTP cooldown (prevent spam)
 OTP_COOLDOWN_TIME = 60  # 1 minute between OTP requests
 
+
+# ============ Fyers API Configuration ============
+# App: MyAPP | App ID: WN2QO5TH4Z-100 | Secret: 7I4F5HTPB9
+FYERS_CLIENT_ID      = os.environ.get('FYERS_CLIENT_ID', '')
+FYERS_SECRET_KEY     = os.environ.get('FYERS_SECRET_KEY', '')
+FYERS_ACCESS_TOKEN   = os.environ.get('FYERS_ACCESS_TOKEN', '')
+FYERS_REFRESH_TOKEN  = os.environ.get('FYERS_REFRESH_TOKEN', '')
+FYERS_PIN            = os.environ.get('FYERS_PIN', '')
+FYERS_FY_ID          = os.environ.get('FYERS_FY_ID', '')
+FYERS_TOTP_KEY       = os.environ.get('FYERS_TOTP_KEY', '')
+FYERS_WEBHOOK_SECRET = os.environ.get('FYERS_WEBHOOK_SECRET', '')
+FYERS_POSTBACK_URL   = os.environ.get('FYERS_POSTBACK_URL', '')
+
+
+# ============ DhanHQ API Configuration ============
+# Client ID: 2606246016
+DHAN_CLIENT_ID    = os.environ.get('DHAN_CLIENT_ID', '')
+DHAN_ACCESS_TOKEN = os.environ.get('DHAN_ACCESS_TOKEN', '')

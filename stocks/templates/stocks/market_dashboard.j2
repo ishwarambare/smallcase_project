@@ -1,0 +1,733 @@
+{# stocks/templates/stocks/market_dashboard.j2 #}
+{# Real-Time Market Dashboard — Fyers Webhook + Lightweight Charts #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Market Dashboard — Smallcase</title>
+  <meta name="description" content="Real-time Indian stock market dashboard with live candlestick charts powered by Fyers webhook and DhanHQ integration.">
+
+  {# Google Fonts #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  {# Lightweight Charts — free, from unpkg pinned to version 4 #}
+  <script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+
+
+  {# Dashboard CSS #}
+  <link rel="stylesheet" href="/static/css/pages/market_dashboard.css">
+</head>
+<body>
+
+<div class="market-layout" id="market-layout">
+
+  {# ── Top Bar ───────────────────────────────────────────────── #}
+  <header class="topbar">
+    <a href="/" class="topbar-brand">
+      <div class="logo-icon">📈</div>
+      <div>
+        <div class="brand-name">Smallcase</div>
+        <div class="brand-sub">Market Live</div>
+      </div>
+    </a>
+
+    <div class="topbar-center">
+      <div class="symbol-search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input
+          type="text"
+          id="symbol-search-input"
+          class="symbol-search"
+          placeholder="Search symbol… (e.g. RELIANCE)"
+          autocomplete="off"
+          spellcheck="false"
+        >
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      {# Market Status #}
+      <div id="market-status" style="font-size:12px; color: var(--text-muted);">
+        <span id="market-time">--:--:--</span>
+      </div>
+
+      {# WebSocket Connection Badge #}
+      <div id="ws-badge" class="ws-badge connecting">
+        <span class="ws-dot"></span>
+        <span id="ws-label">Connecting…</span>
+      </div>
+
+      {# Nav link back to app #}
+      <a href="/dashboard/" style="
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 6px 12px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        transition: all 0.2s;
+      " onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+        Dashboard ↗
+      </a>
+    </div>
+  </header>
+
+  {# ── Ticker Tape ───────────────────────────────────────────── #}
+  <div class="ticker-tape">
+    <div class="ticker-inner" id="ticker-inner">
+      {# Dynamically filled by JS — duplicated for seamless loop #}
+      {% for symbol in watchlist[:13] %}
+        {% set tick = ticks.get(symbol) %}
+        <div class="ticker-item" onclick="switchSymbol('{{ symbol }}')" data-symbol="{{ symbol }}">
+          <span class="ticker-symbol">{{ symbol }}</span>
+          <span class="ticker-price" id="tape-price-{{ symbol }}">
+            {{ '₹{:,.2f}'.format(tick.ltp) if tick else '—' }}
+          </span>
+          <span class="ticker-change {% if tick and tick.change_pct and tick.change_pct >= 0 %}positive{% elif tick and tick.change_pct %}negative{% endif %}"
+                id="tape-change-{{ symbol }}">
+            {% if tick and tick.change_pct is not none %}
+              {{ '+' if tick.change_pct >= 0 else '' }}{{ '{:.2f}'.format(tick.change_pct) }}%
+            {% else %}—{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+      {# Duplicate for infinite scroll #}
+      {% for symbol in watchlist[:13] %}
+        {% set tick = ticks.get(symbol) %}
+        <div class="ticker-item" onclick="switchSymbol('{{ symbol }}')" data-symbol="{{ symbol }}">
+          <span class="ticker-symbol">{{ symbol }}</span>
+          <span class="ticker-price">{{ '₹{:,.2f}'.format(tick.ltp) if tick else '—' }}</span>
+          <span class="ticker-change {% if tick and tick.change_pct and tick.change_pct >= 0 %}positive{% elif tick and tick.change_pct %}negative{% endif %}">
+            {% if tick and tick.change_pct is not none %}
+              {{ '+' if tick.change_pct >= 0 else '' }}{{ '{:.2f}'.format(tick.change_pct) }}%
+            {% else %}—{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Sidebar Watchlist ─────────────────────────────────────── #}
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">
+        <span class="live-dot"></span>Watchlist
+      </div>
+    </div>
+
+    <div id="watchlist-container">
+      {% for symbol in watchlist %}
+        {% set tick = ticks.get(symbol) %}
+        <div
+          class="watchlist-item {% if symbol == default_symbol %}active{% endif %}"
+          id="wl-item-{{ symbol }}"
+          onclick="switchSymbol('{{ symbol }}')"
+          data-symbol="{{ symbol }}"
+        >
+          <div>
+            <div class="wl-symbol">{{ symbol }}</div>
+            <div class="wl-name">NSE</div>
+          </div>
+          <div class="wl-right">
+            <div class="wl-price" id="wl-price-{{ symbol }}">
+              {% if tick %}₹{{ '{:,.2f}'.format(tick.ltp) }}{% else %}—{% endif %}
+            </div>
+            <div class="wl-change {% if tick and tick.change_pct is not none %}{% if tick.change_pct >= 0 %}positive{% else %}negative{% endif %}{% else %}neutral{% endif %}"
+                 id="wl-change-{{ symbol }}">
+              {% if tick and tick.change_pct is not none %}
+                {{ '+' if tick.change_pct >= 0 else '' }}{{ '{:.2f}'.format(tick.change_pct) }}%
+              {% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </aside>
+
+  {# ── Main Chart Area ───────────────────────────────────────── #}
+  <main class="main-area">
+
+    {# Symbol Header #}
+    <div class="symbol-header">
+      <div class="symbol-info">
+        <div class="symbol-name-block">
+          <div class="symbol-code" id="active-symbol">{{ default_symbol }}</div>
+          <div class="symbol-full" id="active-exchange">NSE: India</div>
+        </div>
+        <div class="price-block">
+          <div class="ltp-price" id="active-ltp">
+            {% set tick = ticks.get(default_symbol) %}
+            {{ '₹{:,.2f}'.format(tick.ltp) if tick else '—' }}
+          </div>
+          <div class="price-change-badge {% if ticks.get(default_symbol) and ticks.get(default_symbol).change_pct is not none %}{% if ticks.get(default_symbol).change_pct >= 0 %}positive{% else %}negative{% endif %}{% else %}positive{% endif %}"
+               id="active-change-badge">
+            <span id="active-change-arrow">
+              {% set tick = ticks.get(default_symbol) %}
+              {% if tick and tick.change_pct is not none %}{{ '▲' if tick.change_pct >= 0 else '▼' }}{% else %}—{% endif %}
+            </span>
+            <span id="active-change-val">
+              {% set tick = ticks.get(default_symbol) %}
+              {% if tick and tick.change_pct is not none %}{{ '{:.2f}'.format(tick.change_pct|abs) }}%{% else %}—{% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {# OHLCV Strip #}
+      <div class="ohlcv-strip" id="ohlcv-strip">
+        {% set tick = ticks.get(default_symbol) %}
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">Open</div>
+          <div class="ohlcv-val" id="ohlcv-open">{{ '₹{:,.2f}'.format(tick.open) if tick and tick.open else '—' }}</div>
+        </div>
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">High</div>
+          <div class="ohlcv-val" id="ohlcv-high" style="color: var(--accent-green)">{{ '₹{:,.2f}'.format(tick.high) if tick and tick.high else '—' }}</div>
+        </div>
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">Low</div>
+          <div class="ohlcv-val" id="ohlcv-low" style="color: var(--accent-red)">{{ '₹{:,.2f}'.format(tick.low) if tick and tick.low else '—' }}</div>
+        </div>
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">Prev Close</div>
+          <div class="ohlcv-val" id="ohlcv-prev">{{ '₹{:,.2f}'.format(tick.prev_close) if tick and tick.prev_close else '—' }}</div>
+        </div>
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">Volume</div>
+          <div class="ohlcv-val" id="ohlcv-vol">{{ '{:,}'.format(tick.volume) if tick else '—' }}</div>
+        </div>
+        <div class="ohlcv-item">
+          <div class="ohlcv-label">Source</div>
+          <div class="ohlcv-val" id="ohlcv-src" style="color: var(--accent-cyan); text-transform: uppercase; font-size: 11px;">
+            {{ tick.source if tick else '—' }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Interval / Chart-Type Bar #}
+    <div class="interval-bar">
+      <button class="interval-btn" onclick="setInterval('1m')">1m</button>
+      <button class="interval-btn" onclick="setInterval('5m')">5m</button>
+      <button class="interval-btn active" id="interval-15m" onclick="setInterval('15m')">15m</button>
+      <button class="interval-btn" onclick="setInterval('1h')">1H</button>
+      <button class="interval-btn" onclick="setInterval('1d')">1D</button>
+      <div class="interval-sep"></div>
+      <button class="chart-type-btn active" id="btn-candle" onclick="setChartType('candlestick')">🕯 Candle</button>
+      <button class="chart-type-btn" id="btn-line" onclick="setChartType('line')">📈 Line</button>
+      <button class="chart-type-btn" id="btn-area" onclick="setChartType('area')">🏔 Area</button>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 11px; color: var(--text-muted);" id="last-update-label">Last update: —</span>
+        <span id="tick-count-badge" style="
+          font-size: 10px;
+          font-family: var(--font-mono);
+          color: var(--accent-cyan);
+          background: rgba(6,182,212,0.1);
+          border: 1px solid rgba(6,182,212,0.2);
+          padding: 3px 8px;
+          border-radius: 10px;
+        ">0 ticks</span>
+      </div>
+    </div>
+
+    {# Lightweight Chart Canvas #}
+    <div class="chart-container">
+      <div id="lw-chart"></div>
+
+      {# Loading overlay #}
+      <div class="chart-loading" id="chart-loading">
+        <div class="loading-spinner">
+          <div class="spinner-ring"></div>
+          <div class="loading-text">Connecting to market feed…</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>{# /market-layout #}
+
+{# Tick toast notification #}
+<div class="tick-toast" id="tick-toast"></div>
+
+{# ── JavaScript ─────────────────────────────────────────────── #}
+<script>
+/* ================================================================
+   Real-Time Market Dashboard
+   - Lightweight Charts (candlestick + line + area)
+   - WebSocket (ws/market/<SYMBOL>/) for live ticks
+   - Dynamic symbol switching
+   ================================================================ */
+
+'use strict';
+
+// ── Configuration ──────────────────────────────────────────────
+const WS_BASE = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
+const TICK_API = '/api/market/tick/';
+
+// ── State ───────────────────────────────────────────────────────
+let currentSymbol  = '{{ default_symbol }}';
+let ws             = null;
+let tickCount      = 0;
+let lwChart        = null;
+let mainSeries     = null;
+let volumeSeries   = null;
+let chartType      = 'candlestick';
+let candleBuffer   = {};   // symbol → [{ time, open, high, low, close }]
+let lineBuffer     = {};   // symbol → [{ time, value }]
+let wsReconnectTimer = null;
+let wsReconnectDelay = 1000;
+
+// ── Init Chart ─────────────────────────────────────────────────
+function initChart() {
+  const container = document.getElementById('lw-chart');
+
+  lwChart = LightweightCharts.createChart(container, {
+    width:  container.clientWidth,
+    height: container.clientHeight,
+    layout: {
+      background: { type: 'solid', color: '#060b14' },
+      textColor:  '#8ba7d0',
+    },
+    grid: {
+      vertLines: { color: 'rgba(59,130,246,0.06)' },
+      horzLines: { color: 'rgba(59,130,246,0.06)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(59,130,246,0.5)', width: 1, style: 1 },
+      horzLine: { color: 'rgba(59,130,246,0.5)', width: 1, style: 1 },
+    },
+    rightPriceScale: {
+      borderColor: 'rgba(59,130,246,0.15)',
+    },
+    timeScale: {
+      borderColor:      'rgba(59,130,246,0.15)',
+      timeVisible:      true,
+      secondsVisible:   false,
+    },
+    handleScroll: true,
+    handleScale: true,
+  });
+
+  addCandleSeries();
+
+  // Resize observer
+  const ro = new ResizeObserver(() => {
+    lwChart.applyOptions({
+      width:  container.clientWidth,
+      height: container.clientHeight,
+    });
+  });
+  ro.observe(container);
+}
+
+function addCandleSeries() {
+  if (mainSeries) { lwChart.removeSeries(mainSeries); mainSeries = null; }
+
+  mainSeries = lwChart.addCandlestickSeries({
+    upColor:       '#10b981',
+    downColor:     '#ef4444',
+    borderVisible: false,
+    wickUpColor:   '#10b981',
+    wickDownColor: '#ef4444',
+  });
+
+  // Restore existing candle data
+  const sym = currentSymbol;
+  if (candleBuffer[sym] && candleBuffer[sym].length > 0) {
+    mainSeries.setData(candleBuffer[sym]);
+  }
+}
+
+function addLineSeries() {
+  if (mainSeries) { lwChart.removeSeries(mainSeries); mainSeries = null; }
+
+  mainSeries = lwChart.addLineSeries({
+    color:     '#3b82f6',
+    lineWidth: 2,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius:  5,
+  });
+
+  const sym = currentSymbol;
+  if (lineBuffer[sym] && lineBuffer[sym].length > 0) {
+    mainSeries.setData(lineBuffer[sym]);
+  }
+}
+
+function addAreaSeries() {
+  if (mainSeries) { lwChart.removeSeries(mainSeries); mainSeries = null; }
+
+  mainSeries = lwChart.addAreaSeries({
+    lineColor:      '#3b82f6',
+    topColor:       'rgba(59,130,246,0.35)',
+    bottomColor:    'rgba(59,130,246,0.02)',
+    lineWidth:      2,
+  });
+
+  const sym = currentSymbol;
+  if (lineBuffer[sym] && lineBuffer[sym].length > 0) {
+    mainSeries.setData(lineBuffer[sym]);
+  }
+}
+
+function setChartType(type) {
+  chartType = type;
+
+  // Toggle active buttons
+  document.getElementById('btn-candle').classList.toggle('active', type === 'candlestick');
+  document.getElementById('btn-line').classList.toggle('active', type === 'line');
+  document.getElementById('btn-area').classList.toggle('active', type === 'area');
+
+  if (type === 'candlestick') addCandleSeries();
+  else if (type === 'line')   addLineSeries();
+  else if (type === 'area')   addAreaSeries();
+}
+
+function setInterval(interval) {
+  // Visual toggle only (actual historical data would need API calls)
+  document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// ── WebSocket ───────────────────────────────────────────────────
+function connectWS(symbol) {
+  if (ws) {
+    ws.onclose = null;  // suppress auto-reconnect on manual close
+    ws.close();
+  }
+
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+
+  const url = `${WS_BASE}/ws/market/${encodeURIComponent(symbol)}/`;
+  setBadge('connecting');
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    console.log('[WS] Connected to', url);
+    setBadge('connected');
+    wsReconnectDelay = 1000;  // reset backoff
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWsMessage(msg);
+    } catch (e) {
+      console.warn('[WS] Parse error:', e);
+    }
+  };
+
+  ws.onerror = (e) => {
+    console.error('[WS] Error:', e);
+    setBadge('disconnected');
+  };
+
+  ws.onclose = (e) => {
+    console.warn('[WS] Closed (code=' + e.code + '). Reconnecting in', wsReconnectDelay, 'ms…');
+    setBadge('disconnected');
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+      connectWS(currentSymbol);
+    }, wsReconnectDelay);
+  };
+}
+
+function handleWsMessage(msg) {
+  const type = msg.type;
+
+  if (type === 'connected') {
+    console.log('[WS] Subscribed to', msg.group);
+    hideChartLoading();
+    return;
+  }
+
+  if (type === 'tick' || type === 'last_tick') {
+    if (msg.symbol !== currentSymbol) return;  // wrong symbol
+    processTick(msg, type === 'tick');
+    return;
+  }
+
+  if (type === 'subscribed') {
+    console.log('[WS] Switched to', msg.symbol);
+    hideChartLoading();
+    return;
+  }
+
+  if (type === 'pong') return;
+
+  if (type === 'error') {
+    console.error('[WS] Server error:', msg.message);
+    return;
+  }
+}
+
+// ── Tick Processing ─────────────────────────────────────────────
+function processTick(tick, isLive) {
+  const sym  = tick.symbol;
+  const ltp  = tick.ltp;
+  const now  = Math.floor(Date.now() / 1000);  // Unix timestamp for chart
+  const time = now;
+
+  // Update candle buffer
+  if (!candleBuffer[sym]) candleBuffer[sym] = [];
+  const candles = candleBuffer[sym];
+  const prevCandle = candles[candles.length - 1];
+
+  if (prevCandle && prevCandle.time === time) {
+    // Same second: update high/low/close
+    prevCandle.high  = Math.max(prevCandle.high, ltp);
+    prevCandle.low   = Math.min(prevCandle.low, ltp);
+    prevCandle.close = ltp;
+  } else {
+    // New candle
+    candles.push({
+      time,
+      open:  prevCandle ? prevCandle.close : ltp,
+      high:  tick.high || ltp,
+      low:   tick.low  || ltp,
+      close: ltp,
+    });
+  }
+
+  // Update line buffer
+  if (!lineBuffer[sym]) lineBuffer[sym] = [];
+  lineBuffer[sym].push({ time, value: ltp });
+
+  // Update chart
+  if (mainSeries && sym === currentSymbol) {
+    if (chartType === 'candlestick') {
+      const c = candles[candles.length - 1];
+      mainSeries.update(c);
+    } else {
+      mainSeries.update({ time, value: ltp });
+    }
+  }
+
+  // Update UI panels
+  updateUIForTick(tick, isLive);
+
+  if (isLive) {
+    tickCount++;
+    document.getElementById('tick-count-badge').textContent = tickCount + ' ticks';
+    document.getElementById('last-update-label').textContent =
+      'Last update: ' + new Date().toLocaleTimeString('en-IN');
+  }
+}
+
+function updateUIForTick(tick, isLive) {
+  const sym     = tick.symbol;
+  const ltp     = tick.ltp;
+  const changePct = tick.change_pct;
+
+  const ltpFormatted = '₹' + ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Update active symbol header
+  if (sym === currentSymbol) {
+    const ltpEl = document.getElementById('active-ltp');
+    const prevLtp = parseFloat(ltpEl.textContent.replace(/[₹,]/g, '')) || 0;
+
+    ltpEl.textContent = ltpFormatted;
+
+    // Flash color
+    if (isLive && prevLtp > 0) {
+      const flashClass = ltp > prevLtp ? 'flash-green' : (ltp < prevLtp ? 'flash-red' : '');
+      if (flashClass) {
+        ltpEl.classList.remove('flash-green', 'flash-red');
+        void ltpEl.offsetWidth;  // reflow
+        ltpEl.classList.add(flashClass);
+        setTimeout(() => ltpEl.classList.remove('flash-green', 'flash-red'), 800);
+      }
+    }
+
+    // Change badge
+    if (changePct !== null && changePct !== undefined) {
+      const badge = document.getElementById('active-change-badge');
+      const arrow = document.getElementById('active-change-arrow');
+      const val   = document.getElementById('active-change-val');
+
+      const isPos = changePct >= 0;
+      badge.className = 'price-change-badge ' + (isPos ? 'positive' : 'negative');
+      arrow.textContent = isPos ? '▲' : '▼';
+      val.textContent   = Math.abs(changePct).toFixed(2) + '%';
+    }
+
+    // OHLCV
+    if (tick.open)      document.getElementById('ohlcv-open').textContent = '₹' + tick.open.toLocaleString('en-IN', {minimumFractionDigits:2});
+    if (tick.high)      document.getElementById('ohlcv-high').textContent = '₹' + tick.high.toLocaleString('en-IN', {minimumFractionDigits:2});
+    if (tick.low)       document.getElementById('ohlcv-low').textContent  = '₹' + tick.low.toLocaleString('en-IN', {minimumFractionDigits:2});
+    if (tick.prev_close)document.getElementById('ohlcv-prev').textContent = '₹' + tick.prev_close.toLocaleString('en-IN', {minimumFractionDigits:2});
+    if (tick.volume)    document.getElementById('ohlcv-vol').textContent  = tick.volume.toLocaleString('en-IN');
+    if (tick.source)    document.getElementById('ohlcv-src').textContent  = tick.source.toUpperCase();
+  }
+
+  // Update watchlist item
+  const wlPriceEl  = document.getElementById('wl-price-' + sym);
+  const wlChangeEl = document.getElementById('wl-change-' + sym);
+  const tapePriceEl  = document.getElementById('tape-price-' + sym);
+  const tapeChangeEl = document.getElementById('tape-change-' + sym);
+
+  if (wlPriceEl) {
+    const prevPriceText = wlPriceEl.textContent;
+    const prevLtp = parseFloat(prevPriceText.replace(/[₹,]/g, '')) || 0;
+
+    wlPriceEl.textContent = ltpFormatted;
+
+    if (isLive && prevLtp > 0) {
+      wlPriceEl.classList.remove('flashing-green', 'flashing-red');
+      void wlPriceEl.offsetWidth;
+      wlPriceEl.classList.add(ltp > prevLtp ? 'flashing-green' : 'flashing-red');
+      setTimeout(() => wlPriceEl.classList.remove('flashing-green', 'flashing-red'), 600);
+    }
+  }
+
+  if (wlChangeEl && changePct !== null && changePct !== undefined) {
+    const sign = changePct >= 0 ? '+' : '';
+    wlChangeEl.textContent = sign + changePct.toFixed(2) + '%';
+    wlChangeEl.className = 'wl-change ' + (changePct >= 0 ? 'positive' : 'negative');
+  }
+
+  if (tapePriceEl) tapePriceEl.textContent = ltpFormatted;
+
+  if (tapeChangeEl && changePct !== null && changePct !== undefined) {
+    const sign = changePct >= 0 ? '+' : '';
+    tapeChangeEl.textContent = sign + changePct.toFixed(2) + '%';
+    tapeChangeEl.className = 'ticker-change ' + (changePct >= 0 ? 'positive' : 'negative');
+  }
+
+  // Show live toast
+  if (isLive) {
+    showToast(`📡 ${sym} — ₹${ltp.toLocaleString('en-IN',{minimumFractionDigits:2})} (${tick.source || 'fyers'})`);
+  }
+}
+
+// ── Symbol Switching ────────────────────────────────────────────
+function switchSymbol(symbol) {
+  symbol = symbol.toUpperCase().trim();
+  if (symbol === currentSymbol) return;
+
+  currentSymbol = symbol;
+  tickCount     = 0;
+
+  // Update active item in watchlist
+  document.querySelectorAll('.watchlist-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.symbol === symbol);
+  });
+
+  // Update header symbol
+  document.getElementById('active-symbol').textContent = symbol;
+  document.getElementById('active-ltp').textContent = '—';
+  document.getElementById('ohlcv-open').textContent = '—';
+  document.getElementById('ohlcv-high').textContent = '—';
+  document.getElementById('ohlcv-low').textContent  = '—';
+  document.getElementById('ohlcv-prev').textContent = '—';
+  document.getElementById('ohlcv-vol').textContent  = '—';
+  document.getElementById('tick-count-badge').textContent = '0 ticks';
+  document.getElementById('last-update-label').textContent = 'Last update: —';
+
+  showChartLoading();
+
+  // If WS is open, send subscribe message (no reconnect needed)
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'subscribe', symbol }));
+  } else {
+    connectWS(symbol);
+  }
+
+  // Restore chart data if we have it buffered
+  if (mainSeries) {
+    if (chartType === 'candlestick' && candleBuffer[symbol]) {
+      mainSeries.setData(candleBuffer[symbol]);
+      hideChartLoading();
+    } else if ((chartType === 'line' || chartType === 'area') && lineBuffer[symbol]) {
+      mainSeries.setData(lineBuffer[symbol]);
+      hideChartLoading();
+    }
+  }
+
+  // Fetch last known tick from REST API
+  fetchLastTick(symbol);
+}
+
+function fetchLastTick(symbol) {
+  fetch(TICK_API + encodeURIComponent(symbol) + '/')
+    .then(r => r.json())
+    .then(data => {
+      if (data.success && data.tick) {
+        processTick(data.tick, false);
+        hideChartLoading();
+      }
+    })
+    .catch(err => console.warn('Tick API error:', err));
+}
+
+// ── Symbol Search ───────────────────────────────────────────────
+document.getElementById('symbol-search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const val = e.target.value.toUpperCase().trim();
+    if (val) {
+      switchSymbol(val);
+      e.target.value = '';
+    }
+  }
+});
+
+// ── Loading Overlay ─────────────────────────────────────────────
+function showChartLoading() {
+  document.getElementById('chart-loading').classList.remove('hidden');
+}
+
+function hideChartLoading() {
+  setTimeout(() => {
+    document.getElementById('chart-loading').classList.add('hidden');
+  }, 400);
+}
+
+// ── WS Badge ────────────────────────────────────────────────────
+function setBadge(state) {
+  const badge = document.getElementById('ws-badge');
+  const label = document.getElementById('ws-label');
+  badge.className = 'ws-badge ' + state;
+  label.textContent = state === 'connected' ? 'Live' : state === 'connecting' ? 'Connecting…' : 'Offline';
+}
+
+// ── Toast ────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('tick-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ── Market Clock ─────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const h = String(ist.getHours()).padStart(2, '0');
+  const m = String(ist.getMinutes()).padStart(2, '0');
+  const s = String(ist.getSeconds()).padStart(2, '0');
+  const el = document.getElementById('market-time');
+  if (el) el.textContent = `IST ${h}:${m}:${s}`;
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  connectWS(currentSymbol);
+  fetchLastTick(currentSymbol);
+  updateClock();
+  setInterval(updateClock, 1000);
+});
+
+// Note: setInterval used as a variable above shadows window.setInterval for the clock.
+// Our custom setInterval button handler uses event.target, so we rename the chart one:
+const _clockInterval = window.setInterval;  // saved reference
+</script>
+
+</body>
+</html>

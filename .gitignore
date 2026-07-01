@@ -128,3 +128,7 @@ Thumbs.db
 # Local settings
 .env.local
 .env.production
+
+test_api_key.json
+test_fyer.py
+FAK05592.json

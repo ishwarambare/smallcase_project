@@ -39,6 +39,13 @@ pandas
 numpy
 openpyxl  # For Excel file (.xlsx) support
 
+# Technical analysis
+pandas-ta  # Technical analysis indicators (RSI, MACD, EMA, etc.)
+
+# Fyers & DhanHQ Trading APIs
+fyers-apiv3  # Fyers API v3 SDK for webhooks & market data
+dhanhq       # DhanHQ Python SDK for live market data
+
 # Django Import-Export for admin data import/export
 django-import-export==4.3.1
 

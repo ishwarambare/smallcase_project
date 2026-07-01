@@ -350,4 +350,79 @@ class DocumentChunk(models.Model):
         ]
 
     def __str__(self):
-        return f"Chunk {self.chunk_index} of {self.document.title}"
+        return f"Chunk {self.chunk_index} of {self.document.title}"
+
+
+# ==========================================
+# Real-Time Market Data (Webhook Ticks)
+# ==========================================
+
+class MarketTick(models.Model):
+    """
+    Stores the latest real-time tick for each symbol received from
+    Fyers postback webhook or DhanHQ live data.
+    Used for page-reload recovery (browser fetches last tick on connect).
+    """
+    SOURCE_CHOICES = [
+        ('fyers', 'Fyers API'),
+        ('dhan', 'DhanHQ'),
+        ('manual', 'Manual / Test'),
+    ]
+
+    symbol = models.CharField(max_length=50, unique=True, db_index=True)
+    ltp = models.DecimalField(
+        max_digits=12, decimal_places=4,
+        help_text="Last Traded Price"
+    )
+    open_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    high_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    low_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    prev_close = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    volume = models.BigIntegerField(default=0)
+    change = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text="Absolute change from prev close"
+    )
+    change_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, null=True, blank=True,
+        help_text="Percentage change from prev close"
+    )
+    timestamp = models.DateTimeField(
+        auto_now=True, db_index=True,
+        help_text="Last updated time (auto-set on save)"
+    )
+    source = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default='fyers',
+        db_index=True
+    )
+    raw_payload = models.JSONField(
+        null=True, blank=True,
+        help_text="Raw JSON received from the webhook for debugging"
+    )
+
+    class Meta:
+        ordering = ['symbol']
+        indexes = [
+            models.Index(fields=['symbol']),
+            models.Index(fields=['-timestamp']),
+            models.Index(fields=['source']),
+        ]
+
+    def __str__(self):
+        return f"{self.symbol} @ {self.ltp} ({self.source})"
+
+    def to_dict(self):
+        """Return a serializable dict for WebSocket broadcasting."""
+        return {
+            'symbol': self.symbol,
+            'ltp': float(self.ltp),
+            'open': float(self.open_price) if self.open_price else None,
+            'high': float(self.high_price) if self.high_price else None,
+            'low': float(self.low_price) if self.low_price else None,
+            'prev_close': float(self.prev_close) if self.prev_close else None,
+            'volume': self.volume,
+            'change': float(self.change) if self.change else None,
+            'change_pct': float(self.change_pct) if self.change_pct else None,
+            'source': self.source,
+        }
+

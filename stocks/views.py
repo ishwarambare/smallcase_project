@@ -2168,3 +2168,424 @@ def rag_generate_default_document(request, symbol):
     })
 
 
+# ============================================================
+# Real-Time Market Data — Fyers Webhook + Dashboard
+# ============================================================
+
+import json as _json
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST, require_GET
+
+
+@csrf_exempt
+@require_POST
+def fyers_postback_webhook(request):
+    """
+    POST /api/webhook/fyers/
+
+    Receives Fyers postback (webhook) data for order/position updates.
+    Parses the payload, saves the latest tick, and broadcasts to WebSocket clients.
+
+    Fyers registers this URL as the postback endpoint in their API dashboard.
+
+    Docs: https://myapi.fyers.in/docsv3#tag/Postback-(Webhooks)
+
+    Fyers sends:
+        Content-Type: application/json
+        Body: { "symbol": "NSE:RELIANCE-EQ", "tradedPrice": 2510.5, ... }
+
+    Returns:
+        200 OK  — tick processed successfully
+        400 Bad Request — invalid payload
+        401 Unauthorized — signature mismatch
+        500 Internal Server Error — processing error
+    """
+    from .fyers_service import verify_fyers_signature, process_fyers_postback
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        # ── Signature verification (optional) ────────────────────────────────
+        raw_body = request.body
+        received_sig = request.META.get('HTTP_X_FYERS_SIGNATURE', '')
+        if not verify_fyers_signature(raw_body, received_sig):
+            logger.warning("Fyers webhook: invalid signature")
+            return JsonResponse(
+                {'error': 'Invalid signature'},
+                status=401
+            )
+
+        # ── Parse payload ────────────────────────────────────────────────────
+        content_type = request.META.get('CONTENT_TYPE', '')
+        if 'application/json' in content_type:
+            try:
+                payload = _json.loads(raw_body)
+            except _json.JSONDecodeError as exc:
+                logger.warning("Fyers webhook: JSON parse error: %s", exc)
+                return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        elif request.POST:
+            # Some brokers send form-encoded data
+            payload = dict(request.POST)
+        else:
+            # Try parsing anyway
+            try:
+                payload = _json.loads(raw_body) if raw_body else {}
+            except Exception:
+                payload = {}
+
+        if not payload:
+            return JsonResponse({'error': 'Empty payload'}, status=400)
+
+        logger.info("Fyers postback received: %s", str(payload)[:200])
+
+        # ── Process: parse → save → broadcast ───────────────────────────────
+        result = process_fyers_postback(payload)
+
+        if result['success']:
+            return JsonResponse({
+                'status': 'ok',
+                'symbol': result.get('symbol'),
+                'ltp': result.get('ltp'),
+            }, status=200)
+        else:
+            logger.warning("Fyers postback processing failed: %s", result.get('error'))
+            # Still return 200 to Fyers (so they don't retry excessively)
+            return JsonResponse({
+                'status': 'processed_with_warnings',
+                'warning': result.get('error'),
+            }, status=200)
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Fyers webhook unhandled error: %s", exc)
+        return JsonResponse({'error': 'Internal server error'}, status=500)
+
+
+def market_dashboard(request):
+    """
+    GET /market/
+
+    Renders the real-time market data dashboard.
+    Displays live candlestick chart powered by lightweight-charts (unpkg.com),
+    updated via WebSocket (ws/market/<SYMBOL>/).
+
+    Lists all symbols that have received at least one tick,
+    plus a curated watchlist of popular NSE stocks.
+    """
+    from .models import MarketTick
+
+    # Symbols with stored ticks (for watchlist panel)
+    live_symbols = list(
+        MarketTick.objects.values_list('symbol', flat=True).order_by('symbol')
+    )
+
+    # Default watchlist if no ticks yet
+    default_watchlist = [
+        'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK',
+        'WIPRO', 'BAJFINANCE', 'SBIN', 'AXISBANK', 'HINDUNILVR',
+        'NIFTY', 'BANKNIFTY', 'SENSEX',
+    ]
+
+    # Merge: live + defaults (deduplicated)
+    watchlist = list(dict.fromkeys(live_symbols + default_watchlist))
+
+    # Latest ticks for the watchlist ticker strip
+    ticks = {
+        t.symbol: t.to_dict()
+        for t in MarketTick.objects.filter(symbol__in=watchlist[:20])
+    }
+
+    return render(
+        request,
+        'stocks/market_dashboard.j2',
+        {
+            'watchlist': watchlist,
+            'ticks': ticks,
+            'default_symbol': watchlist[0] if watchlist else 'RELIANCE',
+            'page_title': 'Live Market Dashboard',
+        }
+    )
+
+
+def market_tick_api(request, symbol=None):
+    """
+    GET /api/market/tick/<symbol>/
+    GET /api/market/ticks/           (all symbols)
+
+    REST API to fetch the latest stored tick(s) from DB.
+    Useful for page-load initialization before WebSocket connects.
+    """
+    from .models import MarketTick
+
+    try:
+        if symbol:
+            symbol = symbol.upper().strip()
+            try:
+                tick = MarketTick.objects.get(symbol=symbol)
+                return JsonResponse({'success': True, 'tick': tick.to_dict()})
+            except MarketTick.DoesNotExist:
+                # Fallback to fetching live from Fyers if not in DB
+                from .fyers_service import fyers_service, save_market_tick
+                from datetime import datetime
+                
+                if fyers_service.is_active:
+                    fyers_symbol = f"NSE:{symbol}-EQ"
+                    quotes = fyers_service.get_quotes([fyers_symbol])
+                    if quotes and len(quotes) > 0:
+                        q = quotes[0]
+                        q_val = q.get('v', {})
+                        # Build a synthetic tick
+                        tick_data = {
+                            'symbol': symbol,
+                            'raw_symbol': fyers_symbol,
+                            'ltp': float(q_val.get('lp', 0)),
+                            'open': float(q_val.get('open_price', 0)) if q_val.get('open_price') else None,
+                            'high': float(q_val.get('high_price', 0)) if q_val.get('high_price') else None,
+                            'low': float(q_val.get('low_price', 0)) if q_val.get('low_price') else None,
+                            'prev_close': float(q_val.get('prev_close_price', 0)) if q_val.get('prev_close_price') else None,
+                            'volume': int(q_val.get('volume', 0)),
+                            'change': float(q_val.get('ch', 0)),
+                            'change_pct': float(q_val.get('chp', 0)),
+                            'side': 0,
+                            'status': 'TRADED',
+                            'source': 'fyers',
+                            'event_type': 'quote_fallback',
+                            'timestamp': datetime.utcnow().isoformat() + 'Z',
+                        }
+                        # Save it so it's in DB for next time
+                        save_market_tick(tick_data, q)
+                        try:
+                            tick_obj = MarketTick.objects.get(symbol=symbol)
+                            return JsonResponse({'success': True, 'tick': tick_obj.to_dict()})
+                        except MarketTick.DoesNotExist:
+                            pass
+
+                return JsonResponse({
+                    'success': False,
+                    'error': f'No tick data for symbol: {symbol}'
+                }, status=404)
+        else:
+            ticks = MarketTick.objects.all().order_by('symbol')
+            return JsonResponse({
+                'success': True,
+                'count': ticks.count(),
+                'ticks': [t.to_dict() for t in ticks],
+            })
+    except Exception as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+
+
+# ============================================================
+# Fyers OAuth Flow Views
+# ============================================================
+
+def fyers_auth_url(request):
+    """
+    GET /api/fyers/auth-url/
+    Returns the Fyers OAuth login URL so the frontend can open it.
+    App ID: WN2QO5TH4Z-100
+    """
+    from .fyers_service import fyers_service
+    url = fyers_service.get_auth_url()
+    if url:
+        return JsonResponse({'success': True, 'auth_url': url})
+    return JsonResponse({
+        'success': False,
+        'error': 'Fyers client_id or secret_key not configured in .env'
+    }, status=400)
+
+
+@csrf_exempt
+@require_POST
+def fyers_auth_callback(request):
+    """
+    POST /api/fyers/callback/
+    Receives the auth_code from Fyers OAuth redirect and exchanges it for an access token.
+
+    Body: { "auth_code": "..." }
+
+    After success, copy the returned access_token into .env as FYERS_ACCESS_TOKEN.
+    """
+    from .fyers_service import fyers_service
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        data = _json.loads(request.body)
+        auth_code = data.get('auth_code', '').strip()
+        if not auth_code:
+            return JsonResponse({'error': 'auth_code is required'}, status=400)
+
+        result = fyers_service.exchange_auth_code(auth_code)
+
+        if result['success']:
+            token = result['access_token']
+            logger.info("Fyers access token obtained successfully")
+            return JsonResponse({
+                'success': True,
+                'access_token': token,
+                'message': f'Copy this token into .env as FYERS_ACCESS_TOKEN={token}',
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error'),
+            }, status=400)
+
+    except Exception as exc:
+        logger.exception("Fyers auth callback error: %s", exc)
+        return JsonResponse({'error': str(exc)}, status=500)
+
+
+# ============================================================
+# Fyers Historical Candles API (seeds lightweight-charts)
+# ============================================================
+
+def fyers_candles_api(request, symbol):
+    """
+    GET /api/market/fyers/candles/<SYMBOL>/
+    GET /api/market/fyers/candles/<SYMBOL>/?resolution=15&days=30
+
+    Fetches historical OHLCV candles from Fyers for the given symbol.
+    Used to seed the lightweight-charts chart on page load.
+
+    Query params:
+        resolution: '1'=1min (default), '5', '15', '60', 'D'
+        days:       Number of past days (default 1 = today only)
+    """
+    from .fyers_service import fyers_service
+    from datetime import datetime, timedelta
+
+    symbol = symbol.upper().strip()
+    resolution = request.GET.get('resolution', '1')
+    days = int(request.GET.get('days', 1))
+
+    # Build Fyers symbol format: NSE:RELIANCE-EQ
+    fyers_symbol = f'NSE:{symbol}-EQ'
+
+    date_to = datetime.today().strftime('%Y-%m-%d')
+    date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if not fyers_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Fyers API not active. Set FYERS_ACCESS_TOKEN in .env after OAuth login.',
+            'candles': [],
+            'symbol': symbol,
+        })
+
+    candles = fyers_service.get_historical_candles(
+        symbol=fyers_symbol,
+        resolution=resolution,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'fyers_symbol': fyers_symbol,
+        'resolution': resolution,
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+# ============================================================
+# DhanHQ Candles API (seeds lightweight-charts)
+# ============================================================
+
+def dhan_candles_api(request, symbol):
+    """
+    GET /api/market/candles/<SYMBOL>/
+    GET /api/market/candles/<SYMBOL>/?interval=1
+
+    Fetches today's intraday OHLCV candles from DhanHQ.
+    Used to seed the chart with historical data on page load.
+
+    Query params:
+        interval: Candle interval in minutes (default 1)
+    """
+    from .dhan_service import dhan_service, DHAN_SECURITY_MAP
+
+    symbol = symbol.upper().strip()
+    interval = int(request.GET.get('interval', 1))
+
+    mapping = DHAN_SECURITY_MAP.get(symbol)
+    if not mapping:
+        return JsonResponse({
+            'success': False,
+            'error': f"Symbol '{symbol}' not in DhanHQ security map. Add it to DHAN_SECURITY_MAP in dhan_service.py",
+            'candles': [],
+            'symbol': symbol,
+        }, status=404)
+
+    if not dhan_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'DhanHQ service not active. Check DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in .env',
+            'candles': [],
+            'symbol': symbol,
+        })
+
+    candles = dhan_service.get_intraday_candles(
+        security_id=mapping['security_id'],
+        exchange=mapping['exchange'],
+        interval=interval,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'security_id': mapping['security_id'],
+        'exchange': mapping['exchange'],
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+def dhan_daily_candles_api(request, symbol):
+    """
+    GET /api/market/candles/<SYMBOL>/daily/
+    GET /api/market/candles/<SYMBOL>/daily/?from=2026-01-01&to=2026-07-01
+
+    Fetches daily OHLCV candles from DhanHQ (last 90 days by default).
+    """
+    from .dhan_service import dhan_service, DHAN_SECURITY_MAP
+
+    symbol = symbol.upper().strip()
+    from_date = request.GET.get('from', '')
+    to_date = request.GET.get('to', '')
+
+    mapping = DHAN_SECURITY_MAP.get(symbol)
+    if not mapping:
+        return JsonResponse({
+            'success': False,
+            'error': f"Symbol '{symbol}' not found in DHAN_SECURITY_MAP",
+            'candles': [],
+        }, status=404)
+
+    if not dhan_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'DhanHQ service not active. Check credentials in .env',
+            'candles': [],
+        })
+
+    candles = dhan_service.get_historical_daily(
+        security_id=mapping['security_id'],
+        exchange=mapping['exchange'],
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+
+

@@ -703,22 +703,28 @@ def get_news_sentiment(symbol: str) -> dict:
 # ---------------------------------------------------------------------------
 def get_ownership_analysis(fundamentals: dict) -> dict:
     """Score institutional and insider ownership from already-fetched fundamentals."""
+    bid = fundamentals.get("bid")
+    ask = fundamentals.get("ask")
+    inst = fundamentals.get("held_pct_institutions")
+    insider = fundamentals.get("held_pct_insiders")
+    float_shares = fundamentals.get("float_shares")
+    shares_out = fundamentals.get("shares_outstanding")
+    short_ratio = fundamentals.get("short_ratio")
+    print(f"[OwnershipDebug] symbol={fundamentals.get('symbol')} bid={bid} ask={ask} inst={inst} insider={insider} float={float_shares} shares={shares_out} short_ratio={short_ratio}")
+
     result = {
-        "bid": fundamentals.get("bid"),
-        "ask": fundamentals.get("ask"),
+        "bid": bid,
+        "ask": ask,
         "spread": None,
         "spread_pct": None,
         "inst_holding_pct": None,
         "insider_holding_pct": None,
-        "float_shares": fundamentals.get("float_shares"),
-        "shares_outstanding": fundamentals.get("shares_outstanding"),
-        "short_ratio": fundamentals.get("short_ratio"),
+        "float_shares": float_shares,
+        "shares_outstanding": shares_out,
+        "short_ratio": short_ratio,
         "score": 0,
         "signals": [],
     }
-
-    bid = fundamentals.get("bid")
-    ask = fundamentals.get("ask")
     if bid and ask and bid > 0 and ask > 0:
         result["spread"] = round(ask - bid, 2)
         result["spread_pct"] = round(((ask - bid) / bid) * 100, 4)

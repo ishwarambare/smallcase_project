@@ -250,3 +250,175 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             print(f"Error saving message: {e}")
             return None
+
+
+class MarketDataConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for real-time stock market tick data.
+
+    Clients connect to:
+        ws/market/              → subscribe to ALL symbols (global feed)
+        ws/market/<SYMBOL>/     → subscribe to a specific symbol (e.g. RELIANCE)
+
+    On connect: joins the appropriate Channel Layer group.
+    On tick (from Fyers webhook via Channel Layer): forwards to browser.
+    On connect: sends last known tick from DB (page-reload recovery).
+
+    Message sent to browser:
+        {
+          "type": "tick",
+          "symbol": "RELIANCE",
+          "ltp": 2510.5,
+          "open": 2490.0,
+          "high": 2525.0,
+          "low": 2485.0,
+          "prev_close": 2505.0,
+          "volume": 1245000,
+          "change": 5.5,
+          "change_pct": 0.2196,
+          "source": "fyers",
+          "timestamp": "2026-07-01T08:00:00Z"
+        }
+    """
+
+    async def connect(self):
+        """Handle WebSocket connection for market data."""
+        # Symbol from URL route (None = subscribe to all)
+        self.symbol = self.scope['url_route']['kwargs'].get('symbol', '').upper().strip()
+
+        if self.symbol:
+            # Symbol-specific group: market_RELIANCE, market_TCS, etc.
+            self.group_name = f'market_{self.symbol}'
+        else:
+            # Global feed: all market ticks
+            self.group_name = 'market_all'
+
+        # Join channel layer group
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+
+        await self.accept()
+
+        # Notify client of successful connection
+        await self.send(text_data=json.dumps({
+            'type': 'connected',
+            'group': self.group_name,
+            'symbol': self.symbol or 'ALL',
+            'message': f'Subscribed to market feed: {self.group_name}',
+        }))
+
+        # Send last known tick(s) from DB for immediate display on page load
+        await self.send_last_known_tick()
+
+    async def disconnect(self, close_code):
+        """Handle WebSocket disconnection."""
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name
+            )
+
+    async def receive(self, text_data):
+        """
+        Handle messages from the browser.
+        Supports dynamic symbol subscription switching.
+        """
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get('type', '')
+
+            if msg_type == 'subscribe':
+                # Browser requests to switch symbol
+                new_symbol = data.get('symbol', '').upper().strip()
+                await self.switch_symbol(new_symbol)
+
+            elif msg_type == 'ping':
+                await self.send(text_data=json.dumps({'type': 'pong'}))
+
+        except json.JSONDecodeError:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Invalid JSON'
+            }))
+        except Exception as exc:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': str(exc)
+            }))
+
+    async def switch_symbol(self, new_symbol: str):
+        """Allow browser to switch subscription to a different symbol."""
+        # Leave current group
+        await self.channel_layer.group_discard(
+            self.group_name,
+            self.channel_name
+        )
+
+        # Update state
+        self.symbol = new_symbol
+        self.group_name = f'market_{new_symbol}' if new_symbol else 'market_all'
+
+        # Join new group
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+
+        await self.send(text_data=json.dumps({
+            'type': 'subscribed',
+            'symbol': self.symbol or 'ALL',
+            'group': self.group_name,
+        }))
+
+        # Send last known tick for the new symbol
+        await self.send_last_known_tick()
+
+    async def market_tick(self, event):
+        """
+        Receive a market tick from the Channel Layer and forward to browser.
+        This method is called by Django Channels when a group_send is done
+        with type='market_tick'.
+        """
+        tick = event.get('tick', {})
+
+        # Forward to browser WebSocket
+        await self.send(text_data=json.dumps({
+            'type': 'tick',
+            **tick
+        }))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DB helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def send_last_known_tick(self):
+        """Fetch the last known tick(s) from DB and send to this client."""
+        ticks = await self._get_last_ticks()
+        if ticks:
+            for tick_data in ticks:
+                await self.send(text_data=json.dumps({
+                    'type': 'last_tick',
+                    **tick_data
+                }))
+
+    @database_sync_to_async
+    def _get_last_ticks(self) -> list:
+        """
+        Fetch last known tick(s) from DB.
+        - If symbol is set: return that symbol's tick
+        - Otherwise: return last 20 ticks across all symbols
+        """
+        from .models import MarketTick
+        try:
+            if self.symbol:
+                tick = MarketTick.objects.filter(symbol=self.symbol).first()
+                return [tick.to_dict()] if tick else []
+            else:
+                ticks = MarketTick.objects.order_by('-timestamp')[:20]
+                return [t.to_dict() for t in ticks]
+        except Exception as exc:
+            print(f"MarketDataConsumer: Error fetching last ticks: {exc}")
+            return []
+

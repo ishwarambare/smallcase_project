@@ -210,11 +210,15 @@
 
     {# Interval / Chart-Type Bar #}
     <div class="interval-bar">
-      <button class="interval-btn" onclick="setInterval('1m')">1m</button>
-      <button class="interval-btn" onclick="setInterval('5m')">5m</button>
-      <button class="interval-btn active" id="interval-15m" onclick="setInterval('15m')">15m</button>
-      <button class="interval-btn" onclick="setInterval('1h')">1H</button>
-      <button class="interval-btn" onclick="setInterval('1d')">1D</button>
+      <button class="interval-btn active" onclick="setRange('1D', this)">1D</button>
+      <button class="interval-btn" onclick="setRange('1W', this)">1W</button>
+      <button class="interval-btn" onclick="setRange('1M', this)">1M</button>
+      <button class="interval-btn" onclick="setRange('3M', this)">3M</button>
+      <button class="interval-btn" onclick="setRange('6M', this)">6M</button>
+      <button class="interval-btn" onclick="setRange('1Y', this)">1Y</button>
+      <button class="interval-btn" onclick="setRange('2Y', this)">2Y</button>
+      <button class="interval-btn" onclick="setRange('3Y', this)">3Y</button>
+      <button class="interval-btn" onclick="setRange('5Y', this)">5Y</button>
       <div class="interval-sep"></div>
       <button class="chart-type-btn active" id="btn-candle" onclick="setChartType('candlestick')">🕯 Candle</button>
       <button class="chart-type-btn" id="btn-line" onclick="setChartType('line')">📈 Line</button>
@@ -233,9 +237,25 @@
       </div>
     </div>
 
+    <div class="interval-bar" style="border-top: 1px solid var(--border-subtle);">
+      <span style="font-size: 12px; color: var(--text-muted); margin-right: 10px;">Indicators:</span>
+      <button class="interval-btn" id="ind-SMA:50" onclick="toggleIndicator('SMA:50')">SMA 50</button>
+      <button class="interval-btn" id="ind-EMA:200" onclick="toggleIndicator('EMA:200')">EMA 200</button>
+      <button class="interval-btn" id="ind-RSI:14" onclick="toggleIndicator('RSI:14')">RSI</button>
+      <button class="interval-btn" id="ind-MACD" onclick="toggleIndicator('MACD')">MACD</button>
+      <button class="interval-btn" id="ind-SUPERTREND:7:3" onclick="toggleIndicator('SUPERTREND:7:3')">Supertrend</button>
+      <div class="interval-sep"></div>
+      <span style="font-size: 12px; color: var(--text-muted); margin-right: 10px;">Strategy:</span>
+      <button class="interval-btn" style="color: var(--accent-green);" onclick="runBacktest('SUPERTREND')">▶ Run Backtest</button>
+      <div class="interval-sep"></div>
+      <span style="font-size: 12px; color: var(--text-muted); margin-right: 10px;">Drawings:</span>
+      <button class="interval-btn" id="btn-draw-hline" onclick="toggleDrawHLine()">✏️ Support/Resistance</button>
+    </div>
+
     {# Lightweight Chart Canvas #}
-    <div class="chart-container">
-      <div id="lw-chart"></div>
+    <div class="chart-container" style="display: flex; flex-direction: column;">
+      <div id="lw-chart" style="flex: 1; min-height: 200px;"></div>
+      <div id="lw-oscillator-chart" style="height: 150px; display: none; border-top: 1px solid var(--border-subtle); z-index: 1;"></div>
 
       {# Loading overlay #}
       <div class="chart-loading" id="chart-loading">
@@ -269,6 +289,7 @@ const TICK_API = '/api/market/tick/';
 
 // ── State ───────────────────────────────────────────────────────
 let currentSymbol  = '{{ default_symbol }}';
+let currentRange   = '1D';
 let ws             = null;
 let tickCount      = 0;
 let lwChart        = null;
@@ -279,6 +300,11 @@ let candleBuffer   = {};   // symbol → [{ time, open, high, low, close }]
 let lineBuffer     = {};   // symbol → [{ time, value }]
 let wsReconnectTimer = null;
 let wsReconnectDelay = 1000;
+
+let activeIndicators = new Set();
+let indicatorSeries = {};
+let oscillatorChart = null;
+let isDrawingHLine = false;
 
 // ── Init Chart ─────────────────────────────────────────────────
 function initChart() {
@@ -316,12 +342,36 @@ function initChart() {
 
   // Resize observer
   const ro = new ResizeObserver(() => {
+    const chartContainer = document.querySelector('.chart-container');
     lwChart.applyOptions({
-      width:  container.clientWidth,
-      height: container.clientHeight,
+      width:  chartContainer.clientWidth,
+      height: document.getElementById('lw-chart').clientHeight,
     });
+    if (oscillatorChart) {
+      oscillatorChart.applyOptions({
+        width: chartContainer.clientWidth,
+      });
+    }
   });
-  ro.observe(container);
+  ro.observe(document.querySelector('.chart-container'));
+
+  // Drawing tools click handler
+  lwChart.subscribeClick(param => {
+    if (isDrawingHLine && param.point && mainSeries) {
+      const price = mainSeries.coordinateToPrice(param.point.y);
+      if (price !== null) {
+        mainSeries.createPriceLine({
+          price: price,
+          color: '#f43f5e',
+          lineWidth: 2,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+          axisLabelVisible: true,
+          title: 'S/R',
+        });
+        toggleDrawHLine(); // Toggle off after 1 draw
+      }
+    }
+  });
 }
 
 function addCandleSeries() {
@@ -387,10 +437,81 @@ function setChartType(type) {
   else if (type === 'area')   addAreaSeries();
 }
 
-function setInterval(interval) {
-  // Visual toggle only (actual historical data would need API calls)
-  document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+function setRange(range, el) {
+  if (el) {
+    document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+  currentRange = range;
+  fetchHistoricalData(currentSymbol, range);
+}
+
+function fetchHistoricalData(symbol, range) {
+  let resolution = '1';
+  let days = 1;
+  
+  if (range === '1D') { resolution = '5'; days = 15; }
+  else if (range === '1W') { resolution = '15'; days = 30; }
+  else if (range === '1M') { resolution = '60'; days = 90; }
+  else if (range === '3M') { resolution = 'D'; days = 365; }
+  else if (range === '6M') { resolution = 'D'; days = 365; }
+  else if (range === '1Y') { resolution = 'D'; days = 365; }
+  else if (range === '2Y') { resolution = 'D'; days = 730; }
+  else if (range === '3Y') { resolution = 'D'; days = 1095; }
+  else if (range === '5Y') { resolution = 'D'; days = 1825; }
+
+  showChartLoading();
+  const url = `/api/market/fyers/candles/${encodeURIComponent(symbol)}/?resolution=${resolution}&days=${days}`;
+  
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.success && data.candles && data.candles.length > 0) {
+        const isIntraday = !['3M', '6M', '1Y', '2Y', '3Y', '5Y'].includes(currentRange);
+        if (isIntraday) {
+          data.candles.forEach(c => { c.time += 19800; });
+        }
+        data.candles.sort((a, b) => a.time - b.time);
+        candleBuffer[symbol] = data.candles;
+        lineBuffer[symbol] = data.candles.map(c => ({ time: c.time, value: c.close }));
+        
+        if (mainSeries && symbol === currentSymbol) {
+          if (chartType === 'candlestick') {
+            mainSeries.setData(candleBuffer[symbol]);
+          } else {
+            mainSeries.setData(lineBuffer[symbol]);
+          }
+          
+          const candles = candleBuffer[symbol];
+          if (candles.length > 0) {
+            const now = candles[candles.length - 1].time;
+            let visibleStart = now;
+            if (range === '1D') visibleStart = now - 86400;
+            else if (range === '1W') visibleStart = now - 7 * 86400;
+            else if (range === '1M') visibleStart = now - 30 * 86400;
+            else if (range === '3M') visibleStart = now - 90 * 86400;
+            else if (range === '6M') visibleStart = now - 180 * 86400;
+            else if (range === '1Y') visibleStart = now - 365 * 86400;
+            else if (range === '2Y') visibleStart = now - 730 * 86400;
+            else if (range === '3Y') visibleStart = now - 1095 * 86400;
+            else if (range === '5Y') visibleStart = now - 1825 * 86400;
+            else visibleStart = candles[0].time;
+            
+            lwChart.timeScale().setVisibleRange({
+              from: visibleStart,
+              to: now + 3600
+            });
+          }
+        }
+        fetchAndPlotIndicators();
+        if (mainSeries) mainSeries.setMarkers([]);
+      }
+      hideChartLoading();
+    })
+    .catch(err => {
+      console.error('Error fetching historical data:', err);
+      hideChartLoading();
+    });
 }
 
 // ── WebSocket ───────────────────────────────────────────────────
@@ -469,41 +590,56 @@ function handleWsMessage(msg) {
 function processTick(tick, isLive) {
   const sym  = tick.symbol;
   const ltp  = tick.ltp;
-  const now  = Math.floor(Date.now() / 1000);  // Unix timestamp for chart
-  const time = now;
-
-  // Update candle buffer
-  if (!candleBuffer[sym]) candleBuffer[sym] = [];
+  
+  if (!candleBuffer[sym]) return;
   const candles = candleBuffer[sym];
-  const prevCandle = candles[candles.length - 1];
+  let prevCandle = candles[candles.length - 1];
+  
+  const nowSec = Math.floor(Date.now() / 1000);
+  const isIntraday = !['3M', '6M', '1Y', '2Y', '3Y', '5Y'].includes(currentRange);
+  let tickChartTime = isIntraday ? nowSec + 19800 : Math.floor(nowSec / 86400) * 86400;
 
-  if (prevCandle && prevCandle.time === time) {
-    // Same second: update high/low/close
+  let needNewCandle = false;
+  if (prevCandle) {
+    if (isIntraday) {
+      const resMap = {'1D': 5, '1W': 15, '1M': 60};
+      const resSecs = (resMap[currentRange] || 5) * 60;
+      if (tickChartTime >= prevCandle.time + resSecs) {
+        needNewCandle = true;
+        tickChartTime = prevCandle.time + Math.floor((tickChartTime - prevCandle.time) / resSecs) * resSecs;
+      } else {
+        tickChartTime = prevCandle.time;
+      }
+    } else {
+      if (tickChartTime > prevCandle.time) needNewCandle = true;
+      else tickChartTime = prevCandle.time;
+    }
+  }
+
+  if (!needNewCandle && prevCandle) {
     prevCandle.high  = Math.max(prevCandle.high, ltp);
     prevCandle.low   = Math.min(prevCandle.low, ltp);
     prevCandle.close = ltp;
   } else {
-    // New candle
-    candles.push({
-      time,
+    const newCandle = {
+      time: tickChartTime,
       open:  prevCandle ? prevCandle.close : ltp,
       high:  tick.high || ltp,
       low:   tick.low  || ltp,
       close: ltp,
-    });
+    };
+    candles.push(newCandle);
+    prevCandle = newCandle;
   }
 
-  // Update line buffer
   if (!lineBuffer[sym]) lineBuffer[sym] = [];
-  lineBuffer[sym].push({ time, value: ltp });
+  lineBuffer[sym].push({ time: tickChartTime, value: ltp });
 
-  // Update chart
   if (mainSeries && sym === currentSymbol) {
     if (chartType === 'candlestick') {
-      const c = candles[candles.length - 1];
-      mainSeries.update(c);
+      mainSeries.update(prevCandle);
     } else {
-      mainSeries.update({ time, value: ltp });
+      mainSeries.update({ time: tickChartTime, value: ltp });
     }
   }
 
@@ -604,6 +740,177 @@ function updateUIForTick(tick, isLive) {
   }
 }
 
+function toggleDrawHLine() {
+  isDrawingHLine = !isDrawingHLine;
+  const btn = document.getElementById('btn-draw-hline');
+  if (isDrawingHLine) {
+    btn.classList.add('active');
+  } else {
+    btn.classList.remove('active');
+  }
+}
+
+// ── Indicators & Backtesting ────────────────────────────────────
+
+function toggleIndicator(ind) {
+  const btn = document.getElementById('ind-' + ind);
+  if (activeIndicators.has(ind)) {
+    activeIndicators.delete(ind);
+    btn.classList.remove('active');
+    removeIndicatorSeries(ind);
+  } else {
+    activeIndicators.add(ind);
+    btn.classList.add('active');
+    fetchAndPlotIndicators();
+  }
+}
+
+function removeIndicatorSeries(ind) {
+  if (indicatorSeries[ind]) {
+    if (Array.isArray(indicatorSeries[ind])) {
+      indicatorSeries[ind].forEach(s => {
+        try { oscillatorChart.removeSeries(s); } catch(e){}
+      });
+    } else {
+      try { lwChart.removeSeries(indicatorSeries[ind]); } catch(e){}
+      try { oscillatorChart.removeSeries(indicatorSeries[ind]); } catch(e){}
+    }
+    delete indicatorSeries[ind];
+  }
+  checkOscillatorPane();
+}
+
+function fetchAndPlotIndicators() {
+  if (activeIndicators.size === 0) return;
+  const inds = Array.from(activeIndicators).join(',');
+  const resolutionMap = {'1D': '5', '1W': '15', '1M': '60', '3M': 'D', '6M': 'D', '1Y': 'D', '2Y': 'D', '3Y': 'D', '5Y': 'D'};
+  const daysMap = {'1D': 15, '1W': 30, '1M': 90, '3M': 365, '6M': 365, '1Y': 365, '2Y': 730, '3Y': 1095, '5Y': 1825};
+  const res = resolutionMap[currentRange] || 'D';
+  const days = daysMap[currentRange] || 365;
+  
+  fetch(`/api/market/analysis/${currentSymbol}/?resolution=${res}&days=${days}&indicators=${inds}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.success && data.indicators) {
+        const isIntraday = !['3M', '6M', '1Y', '2Y', '3Y', '5Y'].includes(currentRange);
+        for (const [ind, pts] of Object.entries(data.indicators)) {
+          if (isIntraday) {
+            pts.forEach(p => { p.time += 19800; });
+          }
+          plotIndicator(ind, pts);
+        }
+      }
+    });
+}
+
+function plotIndicator(ind, data) {
+  removeIndicatorSeries(ind);
+  
+  if (ind.startsWith('SMA') || ind.startsWith('EMA')) {
+    const s = lwChart.addLineSeries({ color: ind.startsWith('SMA') ? '#f59e0b' : '#8b5cf6', lineWidth: 2, crosshairMarkerVisible: false });
+    s.setData(data);
+    indicatorSeries[ind] = s;
+  } 
+  else if (ind.startsWith('SUPERTREND')) {
+    const s = lwChart.addLineSeries({ color: '#10b981', lineWidth: 2, crosshairMarkerVisible: false });
+    s.setData(data);
+    indicatorSeries[ind] = s;
+  }
+  else if (ind.startsWith('RSI')) {
+    initOscillatorChart();
+    const s = oscillatorChart.addLineSeries({ color: '#ec4899', lineWidth: 2 });
+    s.setData(data);
+    indicatorSeries[ind] = s;
+    checkOscillatorPane();
+  }
+  else if (ind.startsWith('MACD')) {
+    initOscillatorChart();
+    const macdSeries = oscillatorChart.addLineSeries({ color: '#3b82f6', lineWidth: 2 });
+    const sigSeries = oscillatorChart.addLineSeries({ color: '#f59e0b', lineWidth: 2 });
+    const histSeries = oscillatorChart.addHistogramSeries({
+      color: '#22c55e', priceFormat: { type: 'volume' }
+    });
+    
+    macdSeries.setData(data.map(d => ({time: d.time, value: d.macd})));
+    sigSeries.setData(data.map(d => ({time: d.time, value: d.signal})));
+    histSeries.setData(data.map(d => ({
+      time: d.time, 
+      value: d.histogram, 
+      color: d.histogram >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+    })));
+    
+    indicatorSeries[ind] = [macdSeries, sigSeries, histSeries];
+    checkOscillatorPane();
+  }
+}
+
+function initOscillatorChart() {
+  if (oscillatorChart) return;
+  const container = document.getElementById('lw-oscillator-chart');
+  oscillatorChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 150,
+    layout: { background: { type: 'solid', color: '#060b14' }, textColor: '#8ba7d0' },
+    grid: { vertLines: { color: 'rgba(59,130,246,0.06)' }, horzLines: { color: 'rgba(59,130,246,0.06)' } },
+    timeScale: { visible: false } // Sync with main chart
+  });
+  
+  lwChart.timeScale().subscribeVisibleTimeRangeChange(range => {
+    if(range) oscillatorChart.timeScale().setVisibleRange(range);
+  });
+}
+
+function checkOscillatorPane() {
+  const container = document.getElementById('lw-oscillator-chart');
+  const hasOscillator = Array.from(activeIndicators).some(i => i.startsWith('RSI') || i.startsWith('MACD'));
+  if (hasOscillator) {
+    container.style.display = 'block';
+  } else {
+    container.style.display = 'none';
+  }
+  lwChart.applyOptions({ height: document.getElementById('lw-chart').clientHeight });
+}
+
+function runBacktest(strategy) {
+  const resolutionMap = {'1D': '5', '1W': '15', '1M': '60', '3M': 'D', '6M': 'D', '1Y': 'D', '2Y': 'D', '3Y': 'D', '5Y': 'D'};
+  const daysMap = {'1D': 15, '1W': 30, '1M': 90, '3M': 365, '6M': 365, '1Y': 365, '2Y': 730, '3Y': 1095, '5Y': 1825};
+  
+  showToast(`Running ${strategy} Backtest...`);
+  fetch(`/api/market/backtest/${currentSymbol}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      strategy: strategy,
+      resolution: resolutionMap[currentRange] || 'D',
+      days: daysMap[currentRange] || 365
+    })
+  }).then(r => r.json()).then(data => {
+    if (data.success) {
+      plotBacktestMarkers(data.backtest.trades);
+      showToast(`Backtest Complete! Win Rate: ${data.backtest.stats.win_rate}% | PnL: ₹${data.backtest.stats.total_pnl}`);
+    } else {
+      showToast(`Backtest Failed: ${data.error}`);
+    }
+  });
+}
+
+function plotBacktestMarkers(trades) {
+  const markers = [];
+  const isIntraday = !['3M', '6M', '1Y', '2Y', '3Y', '5Y'].includes(currentRange);
+  trades.forEach(t => {
+    let tTime = t.time;
+    if (isIntraday) tTime += 19800;
+    
+    if (t.type === 'buy') {
+      markers.push({ time: tTime, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'Buy @ ₹' + t.price.toFixed(2) });
+    } else if (t.type === 'sell' && t.note !== 'auto-close') {
+      markers.push({ time: tTime, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'Sell @ ₹' + t.price.toFixed(2) });
+    }
+  });
+  markers.sort((a,b) => a.time - b.time);
+  mainSeries.setMarkers(markers);
+}
+
 // ── Symbol Switching ────────────────────────────────────────────
 function switchSymbol(symbol) {
   symbol = symbol.toUpperCase().trim();
@@ -637,16 +944,8 @@ function switchSymbol(symbol) {
     connectWS(symbol);
   }
 
-  // Restore chart data if we have it buffered
-  if (mainSeries) {
-    if (chartType === 'candlestick' && candleBuffer[symbol]) {
-      mainSeries.setData(candleBuffer[symbol]);
-      hideChartLoading();
-    } else if ((chartType === 'line' || chartType === 'area') && lineBuffer[symbol]) {
-      mainSeries.setData(lineBuffer[symbol]);
-      hideChartLoading();
-    }
-  }
+  // Fetch historical data for new symbol
+  fetchHistoricalData(symbol, currentRange);
 
   // Fetch last known tick from REST API
   fetchLastTick(symbol);
@@ -719,14 +1018,11 @@ function updateClock() {
 document.addEventListener('DOMContentLoaded', () => {
   initChart();
   connectWS(currentSymbol);
+  fetchHistoricalData(currentSymbol, currentRange);
   fetchLastTick(currentSymbol);
   updateClock();
   setInterval(updateClock, 1000);
 });
-
-// Note: setInterval used as a variable above shadows window.setInterval for the clock.
-// Our custom setInterval button handler uses event.target, so we rename the chart one:
-const _clockInterval = window.setInterval;  // saved reference
 </script>
 
 </body>

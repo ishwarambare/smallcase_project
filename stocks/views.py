@@ -2587,5 +2587,102 @@ def dhan_daily_candles_api(request, symbol):
     })
 
 
+# ============================================================
+# Analysis & Backtesting APIs
+# ============================================================
+
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+def market_analysis_api(request, symbol):
+    """
+    GET /api/market/analysis/<SYMBOL>/?resolution=D&days=365&indicators=SMA:50,EMA:200,RSI:14,MACD,SUPERTREND:7:3
+    """
+    from .fyers_service import fyers_service
+    from .analysis import compute_indicators
+    from datetime import datetime, timedelta
+
+    symbol = symbol.upper().strip()
+    resolution = request.GET.get('resolution', 'D')
+    days = int(request.GET.get('days', 365))
+    indicators_str = request.GET.get('indicators', '')
+    
+    indicators = [i.strip() for i in indicators_str.split(',') if i.strip()]
+    
+    fyers_symbol = f'NSE:{symbol}-EQ'
+    date_to = datetime.today().strftime('%Y-%m-%d')
+    date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if not fyers_service.is_active:
+        return JsonResponse({'success': False, 'error': 'Fyers API not active'})
+
+    candles = fyers_service.get_historical_candles(
+        symbol=fyers_symbol,
+        resolution=resolution,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    if not candles:
+        return JsonResponse({'success': False, 'error': 'No historical data found'})
+
+    results = compute_indicators(candles, indicators)
+    
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'indicators': results
+    })
 
 
+@csrf_exempt
+def market_backtest_api(request, symbol):
+    """
+    POST /api/market/backtest/<SYMBOL>/
+    Body: {"strategy": "SUPERTREND", "params": {"length": 7, "multiplier": 3.0}, "resolution": "D", "days": 365}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+        
+    from .fyers_service import fyers_service
+    from .backtester import run_backtest
+    from datetime import datetime, timedelta
+
+    try:
+        data = json.loads(request.body)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+    symbol = symbol.upper().strip()
+    strategy = data.get('strategy', '')
+    params = data.get('params', {})
+    resolution = data.get('resolution', 'D')
+    days = int(data.get('days', 365))
+    
+    fyers_symbol = f'NSE:{symbol}-EQ'
+    date_to = datetime.today().strftime('%Y-%m-%d')
+    date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if not fyers_service.is_active:
+        return JsonResponse({'success': False, 'error': 'Fyers API not active'})
+
+    candles = fyers_service.get_historical_candles(
+        symbol=fyers_symbol,
+        resolution=resolution,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    if not candles:
+        return JsonResponse({'success': False, 'error': 'No historical data found'})
+
+    result = run_backtest(candles, strategy, params)
+    
+    if 'error' in result:
+        return JsonResponse({'success': False, 'error': result['error']})
+        
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'backtest': result
+    })

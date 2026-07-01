@@ -91,6 +91,10 @@ urlpatterns = [
     # GET /api/market/fyers/candles/<SYMBOL>/?resolution=15&days=30
     path('api/market/fyers/candles/<str:symbol>/', views.fyers_candles_api, name='fyers_candles_api'),
 
+    # Analysis & Backtesting
+    path('api/market/analysis/<str:symbol>/', views.market_analysis_api, name='market_analysis_api'),
+    path('api/market/backtest/<str:symbol>/', views.market_backtest_api, name='market_backtest_api'),
+
     # Fyers OAuth helpers
     # GET  /api/fyers/auth-url/  → returns login URL
     # POST /api/fyers/callback/  → exchanges auth_code for access_token

@@ -625,22 +625,73 @@ class FyersService:
             if not date_to:
                 date_to = datetime.today().strftime('%Y-%m-%d')
 
-            r = self._fyers.history(data={
-                'symbol'    : symbol,
-                'resolution': resolution,
-                'date_format': 1,
-                'range_from': date_from,
-                'range_to'  : date_to,
-                'cont_flag' : cont_flag,
-            })
-            if r and r.get('s') == 'ok':
-                candles = [
-                    {'time': int(c[0]), 'open': float(c[1]), 'high': float(c[2]),
-                     'low': float(c[3]), 'close': float(c[4]), 'volume': int(c[5])}
-                    for c in r.get('candles', []) if len(c) >= 6
-                ]
-                logger.info("Fyers history: %d candles for %s (%s)", len(candles), symbol, resolution)
-                return candles
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+
+            if dt_from > dt_to:
+                return []
+
+            # Determine chunk limit based on resolution
+            # Daily resolution 'D' supports 365 days max.
+            # Intraday (e.g., '1', '5', '15', '60') supports 100 days max.
+            if resolution in ('D', '1D', 'W', '1W', 'M', '1M'):
+                step_days = 365
+            else:
+                step_days = 100
+
+            all_candles = []
+            seen_times = set()
+            current_to = dt_to
+
+            while current_to >= dt_from:
+                current_from = max(dt_from, current_to - timedelta(days=step_days))
+                
+                chunk_from_str = current_from.strftime('%Y-%m-%d')
+                chunk_to_str = current_to.strftime('%Y-%m-%d')
+                
+                logger.info(
+                    "Fetching Fyers history chunk for %s (%s): %s to %s",
+                    symbol, resolution, chunk_from_str, chunk_to_str
+                )
+                
+                r = self._fyers.history(data={
+                    'symbol'    : symbol,
+                    'resolution': resolution,
+                    'date_format': 1,
+                    'range_from': chunk_from_str,
+                    'range_to'  : chunk_to_str,
+                    'cont_flag' : cont_flag,
+                })
+                
+                if r and r.get('s') == 'ok':
+                    chunk_candles = r.get('candles', [])
+                    for c in chunk_candles:
+                        if len(c) >= 6:
+                            t = int(c[0])
+                            if t not in seen_times:
+                                seen_times.add(t)
+                                all_candles.append({
+                                    'time': t,
+                                    'open': float(c[1]),
+                                    'high': float(c[2]),
+                                    'low': float(c[3]),
+                                    'close': float(c[4]),
+                                    'volume': int(c[5])
+                                })
+                else:
+                    err_msg = r.get('message') if r else 'No response'
+                    logger.error(
+                        "Fyers history chunk failed for %s to %s: %s",
+                        chunk_from_str, chunk_to_str, err_msg
+                    )
+                
+                current_to = current_from - timedelta(days=1)
+
+            # Sort combined candles chronologically
+            all_candles.sort(key=lambda x: x['time'])
+            logger.info("Fyers history: %d candles combined and sorted for %s (%s)", len(all_candles), symbol, resolution)
+            return all_candles
+
         except Exception as exc:
             logger.exception("get_historical_candles error: %s", exc)
         return []

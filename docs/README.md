@@ -15570,3 +15570,131 @@ All functionality is working as expected!
 ---
 
 *Generated on 2026-06-28. All documentation consolidated into docs/README.md.*
+
+
+---
+
+## Fyers Live Market WebSocket Integration (July 2026)
+
+### Overview
+Replaced the REST API polling mechanism with a direct integration to the official Fyers Data WebSocket SDK (wss://socket.fyers.in/hsm/v1-5/prod). This allows for tick-by-tick real-time streaming of market data directly to the dashboard, significantly improving performance and reducing API rate limits.
+
+### Key Changes
+1. **Direct SDK Integration (stocks/live_feed.py)**: 
+   - Replaced periodic REST polling loop with yers_apiv3.FyersWebsocket.data_ws.FyersDataSocket.
+   - Setup full mode (litemode=False) to receive LTP, OHLC, volume, and percentage changes dynamically.
+2. **Daemon Thread Configuration**:
+   - Fixed an issue where the SDK blocked the Django server thread by explicitly enabling the write_to_file=True configuration flag, which internally sets the SDK's ackground_flag=True to run the WebSocket thread as a daemon.
+3. **StatReloader Shutdown Guard**:
+   - The Django StatReloader handles file changes by killing the process. This caused RuntimeError: cannot schedule new futures after interpreter shutdown when the daemon WebSocket thread attempted to broadcast ticks while the thread pool executor was tearing down.
+   - Added robust 	ry-except RuntimeError guards in _process_tick around save_market_tick and roadcast_tick_to_channel_layer to stop processing gracefully during reloads.
+4. **Fyers SDK Singleton Reset**:
+   - To support smooth server reloads during development, added a reset for data_ws.FyersDataSocket._instance = None before recreating the socket.
+5. **Symbol Formatting Corrections (INDEX_MAP)**:
+   - Fixed a critical silent failure where the Fyers WebSocket rejected subscriptions because of the NSE:NIFTY BANK-INDEX symbol. Corrected the map to use valid index symbols (NSE:NIFTYBANK-INDEX, NSE:FINNIFTY-INDEX).
+
+### Result
+- **Real-Time UI**: Ticks are streamed directly to MarketDataConsumer and pushed to the browser WebSocket, triggering instantaneous UI flashing/updating and updating the LightweightCharts effortlessly.
+- **Resource Efficient**: No more 5-second artificial polling delays. Updates happen as trades occur in the actual market.
+
+
+---
+
+## 🚀 Installation & Setup
+
+Follow these steps to set up the project on your local machine.
+
+### 1. Clone the Repository
+Open your terminal and navigate to the directory where you want to store the project.
+```bash
+git clone <repository_url>
+cd smallcase_project
+```
+
+### 2. Set Up a Virtual Environment
+It is recommended to use a virtual environment to manage dependencies.
+```bash
+python -m venv .venv
+```
+Activate the virtual environment:
+- **Windows:**
+  ```cmd
+  .venv\Scripts\activate
+  ```
+- **macOS/Linux:**
+  ```bash
+  source .venv/bin/activate
+  ```
+
+### 3. Install Dependencies
+Install all required Python packages from the `requirements.txt` file.
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set Up Environment Variables
+The project uses environment variables for configuration and API keys.
+1. Copy the template file to create your own `.env` file:
+   ```bash
+   cp .env.template .env
+   ```
+   *(On Windows, you can use `copy .env.template .env`)*
+2. Open the `.env` file in your text editor and fill in the required keys, specifically:
+   - `SECRET_KEY`: Add a secret key for Django.
+   - `FYERS_CLIENT_ID` and `FYERS_SECRET_KEY`: Get these from your Fyers API dashboard.
+   - `FYERS_REDIRECT_URI`: Make sure this matches your Fyers App configuration (e.g., `http://127.0.0.1:1234/api/fyers/login/`).
+
+### 5. Run Database Migrations
+Set up the SQLite database by running Django's migrations.
+```bash
+python manage.py migrate
+```
+
+---
+
+## 🔄 Daily Routine for Smooth Operation
+
+To ensure the project runs smoothly, especially the live market data integration with Fyers, you need to perform a few steps daily before starting the server. The Fyers API access token expires daily, so it must be refreshed every morning.
+
+### 1. Refresh the Fyers API Token (Every Morning)
+
+The Fyers access token is required for both fetching historical data and establishing the live WebSocket connection for real-time tick data.
+
+Before starting the server, run the Fyers token generation script:
+
+```bash
+python test_fyer.py
+```
+
+- This script will prompt you to complete the Fyers login flow via your web browser.
+- Once authenticated, it will automatically extract the new `access_token` and update your `.env` file.
+- **Note:** Do this every morning before the market opens to avoid "Authentication Failed" or "Token Expired" errors during the day.
+
+### 2. Start the Django Server
+
+Once the Fyers token is refreshed and saved in `.env`, you can start the development server. We use port `1234` as configured for Fyers redirects.
+
+```bash
+python manage.py runserver 1234
+```
+
+- The server will automatically start the background daemon thread that connects to the Fyers Data WebSocket (`wss://socket.fyers.in/hsm/v1-5/prod`).
+- It subscribes to your watchlist stocks and indices (like NIFTY50, BANKNIFTY, AXISBANK, etc.).
+- Live prices will now automatically stream to your dashboard in real-time.
+
+### 3. Expose the Server (If required for Webhooks/External Access)
+
+If you are testing webhooks or need external access to your local server, run ngrok in a separate terminal:
+
+```bash
+ngrok http 1234
+```
+
+---
+
+## 🛠 Troubleshooting
+
+- **No Live Data on Dashboard:** 
+  Check the terminal where `runserver` is running. If you see `Could not authenticate the user` or similar authentication errors, your Fyers token has expired. Stop the server (`Ctrl+C`), run `python test_fyer.py`, and restart the server.
+- **WebSocket Reconnection Issues:**
+  The Fyers Data WebSocket SDK is configured to auto-reconnect. If the connection drops, it will handle reconnections silently in the background. If prices stop updating completely, verify your internet connection and check the terminal logs.

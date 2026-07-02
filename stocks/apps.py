@@ -22,7 +22,13 @@ class StocksConfig(AppConfig):
 
         # Import inside ready() to avoid circular imports / AppRegistryNotReady
         from .auto_import import auto_import_stocks
-        
-        # Spawn in a background thread so it doesn't block server startup
+
+        # Spawn auto-import in a background thread so it doesn't block server startup
         threading.Thread(target=auto_import_stocks, daemon=True).start()
+
+        # ── Start Fyers live price polling feed ──────────────────────────────
+        # This polls Fyers Quotes API every few seconds and broadcasts ticks
+        # to the Django Channels layer → browser WebSocket → real-time chart.
+        from .live_feed import start_live_feed
+        start_live_feed()
 

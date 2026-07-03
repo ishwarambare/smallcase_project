@@ -75,6 +75,10 @@ INSTALLED_APPS = [
     'import_export',  # Django Import-Export for admin data import/export
     'user',  # User authentication app
     'stocks',  # Stock basket management app
+
+    # Celery task results stored in Django DB (no Redis required)
+    'django_celery_results',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -541,3 +545,29 @@ FYERS_POSTBACK_URL   = os.environ.get('FYERS_POSTBACK_URL', '')
 # Client ID: 2606246016
 DHAN_CLIENT_ID    = os.environ.get('DHAN_CLIENT_ID', '')
 DHAN_ACCESS_TOKEN = os.environ.get('DHAN_ACCESS_TOKEN', '')
+
+
+# ============ NVIDIA NIM API Configuration ============
+# Free LLM API — OpenAI-compatible, access via https://build.nvidia.com/
+NVIDIA_API_KEY      = os.environ.get('NVIDIA_API_KEY', '')
+NVIDIA_DEFAULT_MODEL = os.environ.get('NVIDIA_DEFAULT_MODEL', 'meta/llama-3.1-70b-instruct')
+NVIDIA_BASE_URL     = os.environ.get('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
+
+
+# ============ Celery Configuration (Filesystem Broker — No Redis Needed) ============
+CELERY_BROKER_URL              = 'filesystem://'
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'data_folder_in':  str(BASE_DIR / 'celery_queue' / 'out'),
+    'data_folder_out': str(BASE_DIR / 'celery_queue' / 'out'),
+}
+CELERY_RESULT_BACKEND          = os.environ.get('CELERY_RESULT_BACKEND', 'django-db')
+CELERY_ACCEPT_CONTENT          = ['application/json']
+CELERY_TASK_SERIALIZER         = 'json'
+CELERY_RESULT_SERIALIZER       = 'json'
+CELERY_TIMEZONE                = TIME_ZONE
+CELERY_TASK_TRACK_STARTED      = True
+CELERY_TASK_TIME_LIMIT         = 30 * 60   # 30-minute hard limit per task
+CELERY_TASK_SOFT_TIME_LIMIT    = 25 * 60   # 25-minute soft limit
+# Django Celery Results — store task results in the DB
+DJANGO_CELERY_RESULTS_TASK_ID_MAX_LENGTH = 191
+CELERY_IMPORTS = ['stocks.annual_report_agents.tasks']

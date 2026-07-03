@@ -89,11 +89,34 @@ qrcode
 
 # AI Engineering — Financial Document RAG Pipeline
 pypdf>=4.0.0          # Pure-Python PDF text extraction
-chromadb>=0.4.0       # Local file-based vector database for RAG
+chromadb==1.1.1       # Local file-based vector database for RAG (pinned for Rust backend compatibility)
 pgvector>=0.3.0       # Postgres vector extension support (JSON fallback for SQLite)
 reportlab>=5.0.0      # PDF document generation for automated stock reports
 
 # Supabase Storage Backend
 supabase>=2.0.0
+
+# ─── 4-Agent Annual Report Analyzer ──────────────────────────────────────────
+
+# Celery — Background Task Queue (uses Django DB as broker, no Redis required)
+celery>=5.3.0
+django-celery-results>=2.5.0    # Store Celery results in Django DB
+django-celery-beat>=2.6.0       # Periodic task scheduling (optional, included for completeness)
+
+# LangChain ecosystem
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.2.0         # OpenAI-compatible client (used for NVIDIA NIM)
+
+# NVIDIA NIM — OpenAI-compatible API
+langchain-nvidia-ai-endpoints>=0.3.0   # Official NVIDIA LangChain integration
+openai>=1.0.0                           # Direct NVIDIA NIM API calls
+
+# CrewAI — Multi-agent orchestration
+crewai==1.15.1
+crewai-tools>=0.14.0
+
+# News & Search
+duckduckgo-search>=6.0.0        # DuckDuckGo search for Agent 2 (News)
 
 

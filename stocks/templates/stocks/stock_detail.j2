@@ -742,6 +742,118 @@
     </div>
 
     {# ======================================================= #}
+    {# ---- 4-Agent AI Annual Report Analysis Section ---- #}
+    {# ======================================================= #}
+    <div class="detail-section" id="agentAnalysisSection" style="background: linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(16,185,129,0.04) 100%); border: 1px solid rgba(124,58,237,0.2);">
+        <div class="section-heading" style="color: #7c3aed;">
+            🤖 AI Annual Report Analysis
+            <span class="rag-badge" style="background: linear-gradient(135deg,#7c3aed,#06b6d4);">4-Agent Pipeline</span>
+            <span style="font-size:0.72rem;font-weight:400;color:var(--text-secondary);margin-left:8px;">Powered by NVIDIA NIM</span>
+        </div>
+        <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:18px;">
+            Upload an annual report PDF → 4 AI agents (Quant • News • Governance • CIO) analyze it and produce a <strong>BUY / HOLD / SELL</strong> decision.
+        </div>
+
+        {# ── Trigger Panel ── #}
+        <div id="agentTriggerPanel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px;">
+            <select id="agentDocSelect" style="flex:1;min-width:200px;padding:9px 12px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:var(--card-bg);color:var(--text-primary);font-size:0.84rem;">
+                <option value="">— Use existing indexed document —</option>
+            </select>
+            <button id="agentRunBtn" onclick="triggerAgentAnalysis()" style="padding:9px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:700;cursor:pointer;font-size:0.88rem;transition:opacity 0.2s;">
+                ▶ Run 4-Agent Analysis
+            </button>
+            <button onclick="loadAgentJobs()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:transparent;color:#7c3aed;font-weight:600;cursor:pointer;font-size:0.84rem;">
+                📋 Past Jobs
+            </button>
+        </div>
+
+        {# ── Progress Tracker (shown while running) ── #}
+        <div id="agentProgressPanel" style="display:none;">
+            <div style="margin-bottom:14px;font-size:0.82rem;font-weight:600;color:#7c3aed;" id="agentCurrentStep">⏳ Starting pipeline…</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+                <!-- Agent 1 -->
+                <div class="agent-card" id="card-quant" style="background:var(--card-bg);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:1.4rem;">📊</span>
+                        <div>
+                            <div style="font-weight:700;font-size:0.88rem;">Agent 1 — Quant</div>
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">Yahoo Finance Ratios</div>
+                        </div>
+                        <span class="agent-status-dot" id="dot-quant" style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:#94a3b8;"></span>
+                    </div>
+                    <div class="agent-status-text" id="status-quant" style="font-size:0.78rem;color:var(--text-secondary);">Waiting…</div>
+                </div>
+                <!-- Agent 2 -->
+                <div class="agent-card" id="card-news" style="background:var(--card-bg);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:1.4rem;">📰</span>
+                        <div>
+                            <div style="font-weight:700;font-size:0.88rem;">Agent 2 — News</div>
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">DuckDuckGo Sentiment</div>
+                        </div>
+                        <span class="agent-status-dot" id="dot-news" style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:#94a3b8;"></span>
+                    </div>
+                    <div class="agent-status-text" id="status-news" style="font-size:0.78rem;color:var(--text-secondary);">Waiting…</div>
+                </div>
+                <!-- Agent 3 -->
+                <div class="agent-card" id="card-gov" style="background:var(--card-bg);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:1.4rem;">🏛️</span>
+                        <div>
+                            <div style="font-weight:700;font-size:0.88rem;">Agent 3 — Governance</div>
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">Annual Report RAG</div>
+                        </div>
+                        <span class="agent-status-dot" id="dot-gov" style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:#94a3b8;"></span>
+                    </div>
+                    <div class="agent-status-text" id="status-gov" style="font-size:0.78rem;color:var(--text-secondary);">Waiting…</div>
+                </div>
+                <!-- Agent 4 -->
+                <div class="agent-card" id="card-cio" style="background:var(--card-bg);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:1.4rem;">🎯</span>
+                        <div>
+                            <div style="font-weight:700;font-size:0.88rem;">Agent 4 — CIO</div>
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">Final Decision Maker</div>
+                        </div>
+                        <span class="agent-status-dot" id="dot-cio" style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:#94a3b8;"></span>
+                    </div>
+                    <div class="agent-status-text" id="status-cio" style="font-size:0.78rem;color:var(--text-secondary);">Waiting…</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Final Decision Card (shown on completion) ── #}
+        <div id="agentDecisionCard" style="display:none;margin-top:20px;border-radius:16px;overflow:hidden;border:2px solid rgba(124,58,237,0.3);">
+            <div id="agentDecisionHeader" style="padding:18px 22px;display:flex;align-items:center;gap:16px;">
+                <div id="agentDecisionBadge" style="font-size:2rem;font-weight:900;letter-spacing:2px;"></div>
+                <div>
+                    <div id="agentDecisionConf" style="font-size:0.8rem;font-weight:600;opacity:0.8;"></div>
+                    <div id="agentDecisionHorizon" style="font-size:0.78rem;opacity:0.7;"></div>
+                </div>
+                <div id="agentDecisionSummary" style="margin-left:auto;font-size:0.84rem;max-width:400px;opacity:0.9;font-style:italic;"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+                <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;opacity:0.7;">✅ Reasoning</div>
+                    <ul id="agentReasoningList" style="margin:0;padding-left:16px;font-size:0.83rem;"></ul>
+                </div>
+                <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.1);border-left:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;opacity:0.7;">⚠️ Key Risks</div>
+                    <ul id="agentRisksList" style="margin:0;padding-left:16px;font-size:0.83rem;"></ul>
+                </div>
+            </div>
+            {# Expandable agent detail cards #}
+            <div style="padding:12px 22px 16px;border-top:1px solid rgba(255,255,255,0.1);display:grid;grid-template-columns:repeat(3,1fr);gap:10px;" id="agentDetailCards"></div>
+        </div>
+
+        {# ── Past Jobs Panel ── #}
+        <div id="agentJobsPanel" style="display:none;margin-top:16px;"></div>
+
+        {# ── Error message ── #}
+        <div id="agentErrorMsg" style="display:none;margin-top:12px;padding:12px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:0.84rem;"></div>
+    </div>
+
+    {# ======================================================= #}
     {# ---- Financial Document RAG — Chat with Documents ---- #}
     {# ======================================================= #}
     <div class="detail-section rag-section" id="ragSection">
@@ -848,6 +960,7 @@
 {% block javascript %}
 <script>
 const SYMBOL = "{{ symbol }}";
+const DJANGO_CSRF_TOKEN = "{{ csrf_token }}";
 
 // ============================================================
 // Score Gauge — SVG arc animation
@@ -1479,8 +1592,281 @@ async function deleteRagDocument(docId, title) {
 }
 
 function getCsrfToken() {
-    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
-    return cookie ? cookie.trim().split('=')[1] : '';
+    return DJANGO_CSRF_TOKEN || '';
+}
+
+// ============================================================
+// 4-Agent Annual Report AI Analysis
+// ============================================================
+
+let _agentPollInterval = null;
+let _currentJobId      = null;
+
+// Load existing documents into the dropdown on page load
+(function loadAgentDocDropdown() {
+    fetch(`/en/api/ai/rag/documents/${encodeURIComponent(SYMBOL)}/`)
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('agentDocSelect');
+            if (!sel) return;
+            (data.documents || []).forEach(doc => {
+                const opt = document.createElement('option');
+                opt.value = doc.id;
+                opt.textContent = `${doc.title} (${doc.document_type}) ${doc.is_indexed ? '✅' : '⏳'}`;
+                sel.appendChild(opt);
+            });
+        })
+        .catch(() => {});
+})();
+
+async function triggerAgentAnalysis() {
+    const btn    = document.getElementById('agentRunBtn');
+    const docSel = document.getElementById('agentDocSelect');
+    const docId  = docSel ? docSel.value : '';
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting…';
+    _resetAgentUI();
+    document.getElementById('agentProgressPanel').style.display = 'block';
+    document.getElementById('agentErrorMsg').style.display = 'none';
+    document.getElementById('agentDecisionCard').style.display = 'none';
+
+    try {
+        const body = docId ? JSON.stringify({ doc_id: parseInt(docId) }) : '{}';
+        const resp = await fetch(`/en/api/ai/annual-report/analyze/${encodeURIComponent(SYMBOL)}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: body,
+        });
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to start analysis');
+
+        _currentJobId = data.job_id;
+        _startAgentPolling(_currentJobId);
+
+    } catch(e) {
+        _showAgentError(e.message);
+        btn.disabled = false;
+        btn.textContent = '▶ Run 4-Agent Analysis';
+    }
+}
+
+function _startAgentPolling(jobId) {
+    if (_agentPollInterval) clearInterval(_agentPollInterval);
+    _agentPollInterval = setInterval(() => _pollAgentStatus(jobId), 3000);
+    _pollAgentStatus(jobId);  // immediate first poll
+}
+
+async function _pollAgentStatus(jobId) {
+    try {
+        const resp = await fetch(`/en/api/ai/annual-report/status/${jobId}/`);
+        const data = await resp.json();
+
+        if (!data.success) {
+            clearInterval(_agentPollInterval);
+            _showAgentError(data.error || 'Polling error');
+            return;
+        }
+
+        // Update current step label
+        const stepEl = document.getElementById('agentCurrentStep');
+        if (stepEl) stepEl.textContent = data.current_step || '⏳ Processing…';
+
+        // Update per-agent cards
+        if (data.quant_result)      _setAgentCard('quant', data.quant_result, '✅');
+        if (data.news_result)       _setAgentCard('news',  data.news_result,  '✅');
+        if (data.governance_result) _setAgentCard('gov',   data.governance_result, '✅');
+        if (data.final_decision)    _setAgentCard('cio',   data.final_decision, '✅');
+
+        // Terminal states
+        if (data.status === 'done') {
+            clearInterval(_agentPollInterval);
+            _renderDecisionCard(data.final_decision, data.quant_result, data.news_result, data.governance_result);
+            const btn = document.getElementById('agentRunBtn');
+            btn.disabled = false;
+            btn.textContent = '▶ Run Again';
+        } else if (data.status === 'error') {
+            clearInterval(_agentPollInterval);
+            _showAgentError(data.error_message || 'Analysis failed');
+            const btn = document.getElementById('agentRunBtn');
+            btn.disabled = false;
+            btn.textContent = '▶ Retry';
+        } else if (data.status === 'analyzing') {
+            // Show pulsing dots for in-progress agents
+            if (!data.quant_result) _setAgentCard('quant', null, '⏳');
+            if (!data.news_result)  _setAgentCard('news',  null, '⏳');
+            if (!data.governance_result) _setAgentCard('gov', null, '⏳');
+        }
+
+    } catch(e) {
+        console.warn('[Agent Poll]', e);
+    }
+}
+
+function _setAgentCard(agent, data, dotStatus) {
+    const dot  = document.getElementById(`dot-${agent}`);
+    const stat = document.getElementById(`status-${agent}`);
+    if (!dot || !stat) return;
+
+    if (dotStatus === '✅') {
+        dot.style.background = '#10b981';
+        dot.style.boxShadow  = '0 0 6px #10b981';
+    } else if (dotStatus === '⏳') {
+        dot.style.background = '#f59e0b';
+        dot.style.animation  = 'pulse 1.2s infinite';
+    }
+
+    if (data) {
+        // Show a brief summary from the data
+        let summary = '';
+        if (agent === 'quant' && data.raw_data) {
+            const d = data.raw_data;
+            summary = `ROCE: ${d.roce ?? 'N/A'}% | P/E: ${d.pe_ratio ?? 'N/A'}x | D/E: ${d.de_ratio ?? 'N/A'}`;
+        } else if (agent === 'news' && data.raw_data) {
+            summary = data.raw_data.sentiment_label || data.raw_data.summary || 'Done';
+        } else if (agent === 'gov') {
+            summary = data.analysis ? data.analysis.slice(0, 80) + '…' : 'Done';
+        } else if (agent === 'cio' && data.decision) {
+            summary = `DECISION: ${data.decision} (${data.confidence})`;
+        } else {
+            summary = '✅ Complete';
+        }
+        stat.textContent = summary;
+    } else {
+        stat.textContent = '🔄 Running…';
+    }
+}
+
+function _renderDecisionCard(decision, quant, news, gov) {
+    if (!decision) return;
+
+    const card = document.getElementById('agentDecisionCard');
+    const header = document.getElementById('agentDecisionHeader');
+
+    const d = decision.decision || 'UNKNOWN';
+    const colors = {
+        BUY:  { bg: 'linear-gradient(135deg,#10b981,#059669)', text: '#fff' },
+        HOLD: { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', text: '#fff' },
+        SELL: { bg: 'linear-gradient(135deg,#ef4444,#dc2626)', text: '#fff' },
+    };
+    const style = colors[d] || colors.HOLD;
+    header.style.background = style.bg;
+    header.style.color = style.text;
+
+    const badge = document.getElementById('agentDecisionBadge');
+    badge.textContent = `${d === 'BUY' ? '🟢' : d === 'SELL' ? '🔴' : '🟡'} ${d}`;
+
+    document.getElementById('agentDecisionConf').textContent    = `Confidence: ${decision.confidence || 'N/A'}`;
+    document.getElementById('agentDecisionHorizon').textContent = `Horizon: ${decision.horizon || 'N/A'}`;
+    document.getElementById('agentDecisionSummary').textContent = decision.summary || '';
+
+    const reasonList = document.getElementById('agentReasoningList');
+    reasonList.innerHTML = (decision.reasoning || []).map(r => `<li style="margin-bottom:4px;">${r}</li>`).join('');
+
+    const riskList = document.getElementById('agentRisksList');
+    riskList.innerHTML = (decision.risks || []).map(r => `<li style="margin-bottom:4px;">${r}</li>`).join('');
+
+    // Mini quant metrics card
+    const detailCards = document.getElementById('agentDetailCards');
+    let detailHTML = '';
+    if (quant && quant.raw_data) {
+        const qd = quant.raw_data;
+        detailHTML += `<div style="background:rgba(0,0,0,0.15);border-radius:8px;padding:10px;font-size:0.78rem;">
+            <div style="font-weight:700;margin-bottom:6px;opacity:0.8;">📊 Quant Metrics</div>
+            <div>ROCE: <strong>${qd.roce ?? 'N/A'}%</strong></div>
+            <div>P/E: <strong>${qd.pe_ratio ?? 'N/A'}x</strong></div>
+            <div>D/E: <strong>${qd.de_ratio ?? 'N/A'}</strong></div>
+            <div>Net Margin: <strong>${qd.profit_margin_pct ?? 'N/A'}%</strong></div>
+        </div>`;
+    }
+    if (news && news.raw_data) {
+        const nd = news.raw_data;
+        detailHTML += `<div style="background:rgba(0,0,0,0.15);border-radius:8px;padding:10px;font-size:0.78rem;">
+            <div style="font-weight:700;margin-bottom:6px;opacity:0.8;">📰 News Sentiment</div>
+            <div>${nd.sentiment_label || 'N/A'}</div>
+            <div>Score: <strong>${nd.avg_sentiment ?? 'N/A'}</strong></div>
+            <div>Articles: <strong>${(nd.headlines || []).length}</strong></div>
+        </div>`;
+    }
+    if (gov) {
+        detailHTML += `<div style="background:rgba(0,0,0,0.15);border-radius:8px;padding:10px;font-size:0.78rem;">
+            <div style="font-weight:700;margin-bottom:6px;opacity:0.8;">🏛️ Governance</div>
+            <div style="font-size:0.72rem;line-height:1.4;">${gov.analysis ? gov.analysis.slice(0, 200) + '…' : 'See analysis above'}</div>
+        </div>`;
+    }
+    detailCards.innerHTML = detailHTML;
+
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function loadAgentJobs() {
+    const panel = document.getElementById('agentJobsPanel');
+    panel.style.display = 'block';
+    panel.innerHTML = '<div style="font-size:0.84rem;color:var(--text-secondary);">Loading past jobs…</div>';
+
+    try {
+        const resp = await fetch(`/en/api/ai/annual-report/jobs/${encodeURIComponent(SYMBOL)}/`);
+        const data = await resp.json();
+        const jobs = data.jobs || [];
+
+        if (!jobs.length) {
+            panel.innerHTML = '<div style="font-size:0.84rem;color:var(--text-secondary);">No past analysis jobs found.</div>';
+            return;
+        }
+
+        const decisionColors = { BUY: '#10b981', HOLD: '#f59e0b', SELL: '#ef4444' };
+        panel.innerHTML = `<div style="font-size:0.82rem;font-weight:700;margin-bottom:8px;color:var(--text-secondary);">📋 Past Analysis Jobs</div>` +
+            jobs.map(j => {
+                const dec = j.final_decision;
+                const decision = dec ? dec.decision : j.status;
+                const color = decisionColors[decision] || '#94a3b8';
+                const createdAt = j.created_at ? new Date(j.created_at).toLocaleString() : '';
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--card-bg);border:1px solid var(--border-color);margin-bottom:6px;cursor:pointer;"
+                             onclick="restoreAgentJob(${j.id})">
+                    <span style="font-weight:800;color:${color};min-width:50px;">${decision}</span>
+                    <span style="font-size:0.78rem;color:var(--text-secondary);">${createdAt}</span>
+                    <span style="font-size:0.78rem;color:var(--text-secondary);margin-left:auto;">${j.status}</span>
+                </div>`;
+            }).join('');
+    } catch(e) {
+        panel.innerHTML = `<div style="color:#ef4444;font-size:0.84rem;">Error loading jobs: ${e.message}</div>`;
+    }
+}
+
+async function restoreAgentJob(jobId) {
+    try {
+        const resp = await fetch(`/en/api/ai/annual-report/status/${jobId}/`);
+        const data = await resp.json();
+        if (data.success && data.status === 'done') {
+            document.getElementById('agentProgressPanel').style.display = 'block';
+            if (data.quant_result)      _setAgentCard('quant', data.quant_result, '✅');
+            if (data.news_result)       _setAgentCard('news',  data.news_result,  '✅');
+            if (data.governance_result) _setAgentCard('gov',   data.governance_result, '✅');
+            if (data.final_decision)    _setAgentCard('cio',   data.final_decision, '✅');
+            _renderDecisionCard(data.final_decision, data.quant_result, data.news_result, data.governance_result);
+        }
+    } catch(e) { console.warn(e); }
+}
+
+function _resetAgentUI() {
+    ['quant','news','gov','cio'].forEach(agent => {
+        const dot  = document.getElementById(`dot-${agent}`);
+        const stat = document.getElementById(`status-${agent}`);
+        if (dot)  { dot.style.background = '#94a3b8'; dot.style.animation = ''; dot.style.boxShadow = ''; }
+        if (stat) { stat.textContent = 'Waiting…'; }
+    });
+}
+
+function _showAgentError(msg) {
+    const el = document.getElementById('agentErrorMsg');
+    if (el) {
+        el.style.display = 'block';
+        el.textContent = `❌ ${msg}`;
+    }
 }
 </script>
 {% endblock %}

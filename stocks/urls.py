@@ -100,7 +100,19 @@ urlpatterns = [
     # POST /api/fyers/callback/  → exchanges auth_code for access_token
     path('api/fyers/auth-url/', views.fyers_auth_url, name='fyers_auth_url'),
     path('api/fyers/callback/', views.fyers_auth_callback, name='fyers_auth_callback'),
+
+    # ── 4-Agent Annual Report AI Analysis ────────────────────────────────────
+    # Trigger: POST with optional {"doc_id": 42} → returns {job_id} immediately
+    path('api/ai/annual-report/analyze/<str:symbol>/', views.annual_report_analyze, name='annual_report_analyze'),
+    # Poll status: GET → returns job status + all 4 agent results
+    path('api/ai/annual-report/status/<int:job_id>/', views.annual_report_status, name='annual_report_status'),
+    # Job history: GET → list of last 10 analysis jobs for a stock
+    path('api/ai/annual-report/jobs/<str:symbol>/', views.annual_report_jobs, name='annual_report_jobs'),
+
+    # ── NVIDIA NIM Health Check ───────────────────────────────────────────────
+    path('api/ai/nvidia/health/', views.nvidia_health_check, name='nvidia_health_check'),
 ]
+
 
 
 # ======================================

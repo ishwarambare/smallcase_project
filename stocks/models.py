@@ -425,4 +425,92 @@ class MarketTick(models.Model):
             'change_pct': float(self.change_pct) if self.change_pct else None,
             'source': self.source,
         }
+
+
+# ==========================================
+# 4-Agent Annual Report Analysis Pipeline
+# ==========================================
+
+class AnalysisJob(models.Model):
+    """
+    Tracks a single 4-agent AI analysis run for a stock's annual report.
+
+    Lifecycle:
+        pending → ingesting → analyzing → done / error
+
+    Each agent (Quant, News, Governance, CIO) writes its JSON result
+    to the corresponding field as it completes. The Django frontend
+    polls /api/ai/annual-report/status/<id>/ to stream progress.
+    """
+
+    STATUS_CHOICES = [
+        ('pending',   'Pending — queued, not yet started'),
+        ('ingesting', 'Ingesting PDF into ChromaDB'),
+        ('analyzing', 'Agents Running'),
+        ('done',      'Analysis Complete'),
+        ('error',     'Error'),
+    ]
+
+    # Linked stock and optional source document
+    stock    = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+        related_name='analysis_jobs',
+        db_index=True,
+    )
+    document = models.ForeignKey(
+        StockDocument,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='analysis_jobs',
+        help_text='The PDF document that triggered this analysis (optional if re-using indexed data).',
+    )
+
+    # Job tracking
+    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    celery_task_id  = models.CharField(max_length=255, blank=True, db_index=True)
+    current_step    = models.CharField(max_length=100, blank=True,
+                                       help_text='Human-readable progress message shown in the UI.')
+
+    # ── Per-agent results (populated as each agent finishes) ──
+    quant_result      = models.JSONField(null=True, blank=True,
+                                         help_text='Agent 1 Quant: ROCE, D/E, P/E, Revenue CAGR, verdict.')
+    news_result       = models.JSONField(null=True, blank=True,
+                                         help_text='Agent 2 News: headlines, sentiment score, summary.')
+    governance_result = models.JSONField(null=True, blank=True,
+                                         help_text='Agent 3 Governance: management commentary, red flags.')
+    final_decision    = models.JSONField(null=True, blank=True,
+                                         help_text='Agent 4 CIO: final BUY/HOLD/SELL decision + reasoning.')
+
+    # Metadata
+    error_message = models.TextField(blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True, db_index=True)
+    completed_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['stock', '-created_at']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"AnalysisJob #{self.pk} — {self.stock.symbol} [{self.get_status_display()}]"
+
+    def to_status_dict(self):
+        """Serializable dict for the status-polling API endpoint."""
+        return {
+            'id': self.pk,
+            'symbol': self.stock.symbol,
+            'status': self.status,
+            'current_step': self.current_step,
+            'quant_result': self.quant_result,
+            'news_result': self.news_result,
+            'governance_result': self.governance_result,
+            'final_decision': self.final_decision,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+        }
+
 

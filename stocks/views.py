@@ -2658,6 +2658,201 @@ def market_backtest_api(request, symbol):
     params = data.get('params', {})
     resolution = data.get('resolution', 'D')
     days = int(data.get('days', 365))
+    date_to = datetime.today().strftime('%Y-%m-%d')
+    date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if not fyers_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'Fyers API not active. Set FYERS_ACCESS_TOKEN in .env after OAuth login.',
+            'candles': [],
+            'symbol': symbol,
+        })
+
+    candles = fyers_service.get_historical_candles(
+        symbol=fyers_symbol,
+        resolution=resolution,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'fyers_symbol': fyers_symbol,
+        'resolution': resolution,
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+# ============================================================
+# DhanHQ Candles API (seeds lightweight-charts)
+# ============================================================
+
+def dhan_candles_api(request, symbol):
+    """
+    GET /api/market/candles/<SYMBOL>/
+    GET /api/market/candles/<SYMBOL>/?interval=1
+
+    Fetches today's intraday OHLCV candles from DhanHQ.
+    Used to seed the chart with historical data on page load.
+
+    Query params:
+        interval: Candle interval in minutes (default 1)
+    """
+    from .dhan_service import dhan_service, DHAN_SECURITY_MAP
+
+    symbol = symbol.upper().strip()
+    interval = int(request.GET.get('interval', 1))
+
+    mapping = DHAN_SECURITY_MAP.get(symbol)
+    if not mapping:
+        return JsonResponse({
+            'success': False,
+            'error': f"Symbol '{symbol}' not in DhanHQ security map. Add it to DHAN_SECURITY_MAP in dhan_service.py",
+            'candles': [],
+            'symbol': symbol,
+        }, status=404)
+
+    if not dhan_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'DhanHQ service not active. Check DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in .env',
+            'candles': [],
+            'symbol': symbol,
+        })
+
+    candles = dhan_service.get_intraday_candles(
+        security_id=mapping['security_id'],
+        exchange=mapping['exchange'],
+        interval=interval,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'security_id': mapping['security_id'],
+        'exchange': mapping['exchange'],
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+def dhan_daily_candles_api(request, symbol):
+    """
+    GET /api/market/candles/<SYMBOL>/daily/
+    GET /api/market/candles/<SYMBOL>/daily/?from=2026-01-01&to=2026-07-01
+
+    Fetches daily OHLCV candles from DhanHQ (last 90 days by default).
+    """
+    from .dhan_service import dhan_service, DHAN_SECURITY_MAP
+
+    symbol = symbol.upper().strip()
+    from_date = request.GET.get('from', '')
+    to_date = request.GET.get('to', '')
+
+    mapping = DHAN_SECURITY_MAP.get(symbol)
+    if not mapping:
+        return JsonResponse({
+            'success': False,
+            'error': f"Symbol '{symbol}' not found in DHAN_SECURITY_MAP",
+            'candles': [],
+        }, status=404)
+
+    if not dhan_service.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'DhanHQ service not active. Check credentials in .env',
+            'candles': [],
+        })
+
+    candles = dhan_service.get_historical_daily(
+        security_id=mapping['security_id'],
+        exchange=mapping['exchange'],
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'count': len(candles),
+        'candles': candles,
+    })
+
+
+# ============================================================
+# Analysis & Backtesting APIs
+# ============================================================
+
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+def market_analysis_api(request, symbol):
+    """
+    GET /api/market/analysis/<SYMBOL>/?resolution=D&days=365&indicators=SMA:50,EMA:200,RSI:14,MACD,SUPERTREND:7:3
+    """
+    from .fyers_service import fyers_service
+    from .analysis import compute_indicators
+    from datetime import datetime, timedelta
+
+    symbol = symbol.upper().strip()
+    resolution = request.GET.get('resolution', 'D')
+    days = int(request.GET.get('days', 365))
+    indicators_str = request.GET.get('indicators', '')
+    
+    indicators = [i.strip() for i in indicators_str.split(',') if i.strip()]
+    
+    fyers_symbol = f'NSE:{symbol}-EQ'
+    date_to = datetime.today().strftime('%Y-%m-%d')
+    date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    if not fyers_service.is_active:
+        return JsonResponse({'success': False, 'error': 'Fyers API not active'})
+
+    candles = fyers_service.get_historical_candles(
+        symbol=fyers_symbol,
+        resolution=resolution,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    if not candles:
+        return JsonResponse({'success': False, 'error': 'No historical data found'})
+
+    results = compute_indicators(candles, indicators)
+    
+    return JsonResponse({
+        'success': True,
+        'symbol': symbol,
+        'indicators': results
+    })
+
+
+@csrf_exempt
+def market_backtest_api(request, symbol):
+    """
+    POST /api/market/backtest/<SYMBOL>/
+    Body: {"strategy": "SUPERTREND", "params": {"length": 7, "multiplier": 3.0}, "resolution": "D", "days": 365}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+        
+    from .fyers_service import fyers_service
+    from .backtester import run_backtest
+    from datetime import datetime, timedelta
+
+    try:
+        data = json.loads(request.body)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body'}, status=400)
+
+    symbol = symbol.upper().strip()
+    strategy = data.get('strategy', '')
+    params = data.get('params', {})
+    resolution = data.get('resolution', 'D')
+    days = int(data.get('days', 365))
     
     fyers_symbol = f'NSE:{symbol}-EQ'
     date_to = datetime.today().strftime('%Y-%m-%d')
@@ -2677,12 +2872,136 @@ def market_backtest_api(request, symbol):
         return JsonResponse({'success': False, 'error': 'No historical data found'})
 
     result = run_backtest(candles, strategy, params)
-    
+
     if 'error' in result:
         return JsonResponse({'success': False, 'error': result['error']})
-        
+
     return JsonResponse({
         'success': True,
         'symbol': symbol,
         'backtest': result
     })
+
+
+# ============================================================
+# 4-Agent Annual Report AI Analysis Views
+# ============================================================
+
+@login_required
+def annual_report_analyze(request, symbol):
+    """
+    POST /api/ai/annual-report/analyze/<symbol>/
+
+    Triggers the 4-agent AI analysis pipeline for a stock's annual report.
+    Returns immediately (HTTP 202) — analysis runs in Celery background.
+
+    Request body (JSON):
+        { "doc_id": 42 }   // optional StockDocument.pk; omit to use existing index
+
+    Response:
+        { "success": true, "job_id": 7, "message": "..." }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    import json as _json
+    from .models import Stock, StockDocument, AnalysisJob
+    from .annual_report_agents.tasks import analyze_annual_report as _task
+
+    try:
+        body   = _json.loads(request.body) if request.body else {}
+        doc_id = body.get('doc_id')
+
+        # Validate stock
+        try:
+            stock = Stock.objects.get(symbol__iexact=symbol)
+        except Stock.DoesNotExist:
+            return JsonResponse({'success': False, 'error': f'Stock {symbol} not found'}, status=404)
+
+        # Validate document if provided
+        doc = None
+        if doc_id:
+            try:
+                doc = StockDocument.objects.get(pk=doc_id, stock=stock)
+            except StockDocument.DoesNotExist:
+                return JsonResponse({'success': False, 'error': f'Document {doc_id} not found for {symbol}'}, status=404)
+
+        # Create AnalysisJob record in DB (instantaneous)
+        job = AnalysisJob.objects.create(
+            stock=stock,
+            document=doc,
+            status='pending',
+            current_step='⏳ Queued — waiting for Celery worker…',
+        )
+
+        # Dispatch to Celery background worker
+        task_result = _task.apply_async(
+            kwargs={
+                'job_id': job.pk,
+                'symbol': stock.symbol,
+                'doc_id': doc_id,
+            },
+            countdown=1,
+        )
+
+        job.celery_task_id = task_result.id or ''
+        job.save(update_fields=['celery_task_id'])
+
+        return JsonResponse({
+            'success': True,
+            'job_id':  job.pk,
+            'message': f'Analysis started. Poll /api/ai/annual-report/status/{job.pk}/ for updates.',
+        }, status=202)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[annual_report_analyze] {e}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def annual_report_status(request, job_id):
+    """
+    GET /api/ai/annual-report/status/<job_id>/
+
+    Polling endpoint — returns current job status and all agent results.
+    No authentication required (safe for frontend polling).
+    """
+    from .models import AnalysisJob
+
+    try:
+        job = AnalysisJob.objects.select_related('stock').get(pk=job_id)
+        return JsonResponse({'success': True, **job.to_status_dict()})
+    except AnalysisJob.DoesNotExist:
+        return JsonResponse({'success': False, 'error': f'Job {job_id} not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def annual_report_jobs(request, symbol):
+    """
+    GET /api/ai/annual-report/jobs/<symbol>/
+
+    Lists the last 10 analysis jobs for a stock.
+    """
+    from .models import AnalysisJob, Stock
+
+    try:
+        stock = Stock.objects.get(symbol__iexact=symbol)
+        jobs  = AnalysisJob.objects.filter(stock=stock).order_by('-created_at')[:10]
+        return JsonResponse({'success': True, 'jobs': [j.to_status_dict() for j in jobs]})
+    except Stock.DoesNotExist:
+        return JsonResponse({'success': False, 'jobs': [], 'error': f'Stock {symbol} not found'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'jobs': [], 'error': str(e)}, status=500)
+
+
+def nvidia_health_check(request):
+    """
+    GET /api/ai/nvidia/health/
+
+    Health check for the NVIDIA NIM API connection.
+    """
+    from .nvidia_service import test_nvidia_connection
+    result = test_nvidia_connection()
+    return JsonResponse(result, status=200 if result['ok'] else 503)

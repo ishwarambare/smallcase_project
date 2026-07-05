@@ -75,29 +75,30 @@ def analyze_annual_report(self, job_id: int, symbol: str, doc_id: int = None):
 
     try:
         # ── PHASE 1: PDF Ingestion ────────────────────────────────────────
-        if doc_id:
-            _update_job(job, status='ingesting', step='📄 Ingesting PDF into ChromaDB…')
+        from stocks.models import StockDocument
+        docs = StockDocument.objects.filter(stock=job.stock)
+
+        if docs.exists():
+            _update_job(job, status='ingesting', step='📄 Ingesting all PDFs into ChromaDB…')
 
             from .pdf_ingestion import ingest_pdf_for_agents
 
             def progress_cb(msg):
                 _update_job(job, step=msg)
 
-            ingest_result = ingest_pdf_for_agents(
-                symbol=symbol,
-                document_id=doc_id,
-                job_updater=progress_cb,
-            )
-
-            if not ingest_result['success']:
-                # Log warning but continue — agents can still run with existing DB data
-                logger.warning(
-                    f"[Task] PDF ingest failed for job {job_id}: {ingest_result['error']}. "
-                    f"Continuing with existing ChromaDB data."
+            for d in docs:
+                ingest_result = ingest_pdf_for_agents(
+                    symbol=symbol,
+                    document_id=d.pk,
+                    job_updater=progress_cb,
                 )
-                _update_job(job, step=f"⚠️ PDF ingest warning: {ingest_result['error'][:80]}")
+
+                if not ingest_result['success']:
+                    logger.warning(
+                        f"[Task] PDF ingest failed for job {job_id}, doc {d.pk}: {ingest_result['error']}. "
+                    )
         else:
-            _update_job(job, step='ℹ️  No new PDF — using existing indexed data')
+            _update_job(job, step='ℹ️  No PDF found for this stock — using existing indexed data if any')
 
         # ── PHASE 2: Run 4-Agent Crew ────────────────────────────────────
         _update_job(job, status='analyzing', step='🤖 Starting 4-agent AI crew (NVIDIA NIM)…')
@@ -107,10 +108,22 @@ def analyze_annual_report(self, job_id: int, symbol: str, doc_id: int = None):
         def crew_progress_cb(msg):
             _update_job(job, step=msg)
 
+        def thought_updater(thought: str):
+            try:
+                from stocks.models import AnalysisJob
+                j = AnalysisJob.objects.get(pk=job_id)
+                thoughts = j.agent_thoughts if isinstance(j.agent_thoughts, list) else []
+                thoughts.append(thought)
+                j.agent_thoughts = thoughts
+                j.save(update_fields=['agent_thoughts'])
+            except Exception as e:
+                logger.error(f"[Task] Failed to save thought: {e}")
+
         result = run_analysis_crew(
             symbol=symbol,
             company_name=company_name,
             job_updater=crew_progress_cb,
+            thought_updater=thought_updater,
         )
 
         if result.get('error'):

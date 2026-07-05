@@ -759,8 +759,6 @@
             <button id="agentRunBtn" onclick="triggerAgentAnalysis()" style="padding:9px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:700;cursor:pointer;font-size:0.88rem;transition:opacity 0.2s;">
                 ▶ Run 4-Agent Analysis
             </button>
-                ▶ Run 4-Agent Analysis
-            </button>
             <button onclick="loadAgentJobs()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:transparent;color:#7c3aed;font-weight:600;cursor:pointer;font-size:0.84rem;">
                 📋 Past Jobs
             </button>
@@ -769,6 +767,12 @@
         {# ── Progress Tracker (shown while running) ── #}
         <div id="agentProgressPanel" style="display:none;">
             <div style="margin-bottom:14px;font-size:0.82rem;font-weight:600;color:#7c3aed;" id="agentCurrentStep">⏳ Starting pipeline…</div>
+
+            <div id="agentTerminalPanel" style="background:#1e1e1e; color:#00ff00; font-family:monospace; font-size:0.75rem; padding:10px; border-radius:8px; margin-bottom:16px; max-height:200px; overflow-y:auto; border:1px solid #333; display:none;">
+                <div style="font-weight:bold; margin-bottom:8px; color:#fff;">Agent Thinking Process:</div>
+                <div id="agentTerminalContent"></div>
+            </div>
+
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
                 <!-- Agent 1 -->
                 <div class="agent-card" id="card-quant" style="background:var(--card-bg);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:14px;">
@@ -1673,6 +1677,17 @@ async function _pollAgentStatus(jobId) {
         const stepEl = document.getElementById('agentCurrentStep');
         if (stepEl) stepEl.textContent = data.current_step || '⏳ Processing…';
 
+        // Update thoughts terminal
+        if (data.agent_thoughts && data.agent_thoughts.length > 0) {
+            const termPanel = document.getElementById('agentTerminalPanel');
+            const termContent = document.getElementById('agentTerminalContent');
+            if (termPanel && termContent) {
+                termPanel.style.display = 'block';
+                termContent.innerHTML = data.agent_thoughts.map(t => `<div style="margin-bottom:4px;border-bottom:1px dashed #333;padding-bottom:4px;">${t.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('');
+                termPanel.scrollTop = termPanel.scrollHeight;
+            }
+        }
+
         // Update per-agent cards
         if (data.quant_result)      _setAgentCard('quant', data.quant_result, '✅');
         if (data.news_result)       _setAgentCard('news',  data.news_result,  '✅');
@@ -1733,6 +1748,28 @@ function _setAgentCard(agent, data, dotStatus) {
             summary = '✅ Complete';
         }
         stat.textContent = summary;
+
+        // Show full detailed analysis below the card if available (except for CIO which has its own decision card)
+        if (data.analysis && agent !== 'cio') {
+            let detailBox = document.getElementById(`detail-${agent}`);
+            if (!detailBox) {
+                const card = document.getElementById(`card-${agent}`);
+                detailBox = document.createElement('div');
+                detailBox.id = `detail-${agent}`;
+                detailBox.style.marginTop = '10px';
+                detailBox.style.padding = '10px';
+                detailBox.style.background = 'var(--bg-secondary, #f8fafc)';
+                detailBox.style.borderRadius = '8px';
+                detailBox.style.fontSize = '0.75rem';
+                detailBox.style.color = 'var(--text-secondary)';
+                detailBox.style.maxHeight = '200px';
+                detailBox.style.overflowY = 'auto';
+                detailBox.style.border = '1px solid rgba(124,58,237,0.1)';
+                card.appendChild(detailBox);
+            }
+            detailBox.innerHTML = marked.parse(data.analysis);
+        }
+
     } else {
         stat.textContent = '🔄 Running…';
     }
@@ -1856,7 +1893,15 @@ function _resetAgentUI() {
         const stat = document.getElementById(`status-${agent}`);
         if (dot)  { dot.style.background = '#94a3b8'; dot.style.animation = ''; dot.style.boxShadow = ''; }
         if (stat) { stat.textContent = 'Waiting…'; }
+        const detailBox = document.getElementById(`detail-${agent}`);
+        if (detailBox) detailBox.remove();
     });
+    const termPanel = document.getElementById('agentTerminalPanel');
+    if (termPanel) {
+        termPanel.style.display = 'none';
+        const termContent = document.getElementById('agentTerminalContent');
+        if (termContent) termContent.innerHTML = '';
+    }
 }
 
 function _showAgentError(msg) {

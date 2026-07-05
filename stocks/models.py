@@ -474,6 +474,8 @@ class AnalysisJob(models.Model):
                                        help_text='Human-readable progress message shown in the UI.')
 
     # ── Per-agent results (populated as each agent finishes) ──
+    agent_thoughts    = models.JSONField(default=list, blank=True, 
+                                         help_text='List of intermediate thoughts and steps from the agents')
     quant_result      = models.JSONField(null=True, blank=True,
                                          help_text='Agent 1 Quant: ROCE, D/E, P/E, Revenue CAGR, verdict.')
     news_result       = models.JSONField(null=True, blank=True,
@@ -505,6 +507,7 @@ class AnalysisJob(models.Model):
             'symbol': self.stock.symbol,
             'status': self.status,
             'current_step': self.current_step,
+            'agent_thoughts': self.agent_thoughts,
             'quant_result': self.quant_result,
             'news_result': self.news_result,
             'governance_result': self.governance_result,

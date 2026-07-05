@@ -39,6 +39,7 @@ def run_analysis_crew(
     symbol: str,
     company_name: str = None,
     job_updater=None,
+    thought_updater=None,
 ) -> dict:
     """
     Run the full 4-agent analysis crew for a given stock.
@@ -177,11 +178,31 @@ def run_analysis_crew(
 
         # ── Step 3: Run the Crew ─────────────────────────────────────────────
         _update("🤖 Running 4-agent CrewAI crew (NVIDIA NIM)…")
+
+        def crew_step_callback(step):
+            if thought_updater:
+                try:
+                    # In newer crewai versions, step is often a tuple or an AgentStep object.
+                    # We can try to extract thought or text if available.
+                    thought_text = ""
+                    if hasattr(step, 'thought') and step.thought:
+                        thought_text = str(step.thought)
+                    elif isinstance(step, tuple) and len(step) > 0:
+                        thought_text = str(step[0].log if hasattr(step[0], 'log') else step[0])
+                    else:
+                        thought_text = str(step)
+                    
+                    if thought_text:
+                        thought_updater(thought_text)
+                except Exception as e:
+                    pass
+
         crew = Crew(
             agents=[quant_agent, news_agent, gov_agent, cio_agent],
             tasks=[task_quant, task_news, task_governance, task_cio],
             process=Process.sequential,
             verbose=True,
+            step_callback=crew_step_callback,
         )
 
         crew_output = crew.kickoff()

@@ -240,9 +240,9 @@ class BasketItemInline(admin.TabularInline):
 class BasketAdmin(ImportExportModelAdmin):
     """Basket admin with import/export functionality."""
     resource_class = BasketResource
-    list_display = ['name', 'user', 'investment_amount', 'created_at', 'get_current_value', 'get_profit_loss']
+    list_display = ['name', 'user', 'investment_amount', 'is_default', 'created_at', 'get_current_value', 'get_profit_loss']
     search_fields = ['name', 'description', 'user__email']
-    list_filter = ['created_at', 'user']
+    list_filter = ['is_default', 'created_at', 'user']
     ordering = ['-created_at']
     inlines = [BasketItemInline]
 

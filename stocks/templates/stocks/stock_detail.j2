@@ -756,10 +756,9 @@
 
         {# ── Trigger Panel ── #}
         <div id="agentTriggerPanel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px;">
-            <select id="agentDocSelect" style="flex:1;min-width:200px;padding:9px 12px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:var(--card-bg);color:var(--text-primary);font-size:0.84rem;">
-                <option value="">— Use existing indexed document —</option>
-            </select>
             <button id="agentRunBtn" onclick="triggerAgentAnalysis()" style="padding:9px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:700;cursor:pointer;font-size:0.88rem;transition:opacity 0.2s;">
+                ▶ Run 4-Agent Analysis
+            </button>
                 ▶ Run 4-Agent Analysis
             </button>
             <button onclick="loadAgentJobs()" style="padding:9px 16px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:transparent;color:#7c3aed;font-weight:600;cursor:pointer;font-size:0.84rem;">
@@ -1621,8 +1620,7 @@ let _currentJobId      = null;
 
 async function triggerAgentAnalysis() {
     const btn    = document.getElementById('agentRunBtn');
-    const docSel = document.getElementById('agentDocSelect');
-    const docId  = docSel ? docSel.value : '';
+    const docId  = ''; // No longer relying on dropdown, always uses empty string (all docs)
 
     btn.disabled = true;
     btn.textContent = '⏳ Starting…';

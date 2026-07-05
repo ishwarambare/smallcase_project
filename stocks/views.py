@@ -56,6 +56,7 @@ def home(request):
     stocks = Stock.objects.all().order_by('symbol')
     
     baskets = []
+    default_baskets = []
     total_invested = 0
     total_current_value = 0
     total_profit_loss = 0
@@ -80,9 +81,15 @@ def home(request):
         
         total_profit_loss = total_current_value - float(total_invested)
 
+        # Fetch default baskets
+        default_baskets = Basket.objects.filter(is_default=True).prefetch_related(
+            Prefetch('items', queryset=BasketItem.objects.select_related('stock'))
+        ).order_by('-created_at')
+
     context = {
         'stocks': stocks,
         'baskets': baskets,
+        'default_baskets': default_baskets,
         'total_invested': total_invested,
         'total_current_value': total_current_value,
         'total_profit_loss': total_profit_loss,
@@ -277,14 +284,13 @@ def basket_create(request):
         'prefill_stocks': prefill_stocks,
     }
     return render(request, 'stocks/basket_create.j2', context)
-
-
 @login_required
 def basket_detail(request, basket_id):
     """View basket details"""
     from django.template.loader import get_template
+    from django.db.models import Q
     
-    basket = get_object_or_404(Basket, id=basket_id, user=request.user)
+    basket = get_object_or_404(Basket, Q(id=basket_id), Q(user=request.user) | Q(is_default=True))
     # OPTIMIZATION: Use select_related to avoid N+1 queries
     items = basket.items.select_related('stock').all()
 
@@ -342,14 +348,14 @@ def basket_detail(request, basket_id):
     }
     return render(request, 'stocks/basket_detail.j2', context)
 
-
 @login_required
 def basket_chart_data(request, basket_id):
     """API endpoint to get basket performance vs indices data for chart"""
     from django.http import JsonResponse
     from .utils import fetch_index_historical_data, calculate_basket_historical_performance, INDIAN_INDICES
+    from django.db.models import Q
     
-    basket = get_object_or_404(Basket, id=basket_id, user=request.user)
+    basket = get_object_or_404(Basket, Q(id=basket_id), Q(user=request.user) | Q(is_default=True))
     
     # Get period from request, default to 1 month
     period = request.GET.get('period', '1m')

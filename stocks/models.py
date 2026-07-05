@@ -32,6 +32,7 @@ class Basket(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     investment_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    is_default = models.BooleanField(default=False, db_index=True, help_text="Set to True to show this basket on all users' dashboards")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 

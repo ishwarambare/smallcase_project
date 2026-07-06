@@ -185,7 +185,7 @@ def fetch_news_sentiment(symbol: str, company_name: str = None) -> dict:
         }
     """
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
 
         search_query = f"{company_name or symbol} stock news earnings 2024 2025"
 

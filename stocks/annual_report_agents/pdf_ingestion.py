@@ -16,6 +16,7 @@ import io
 import re
 import logging
 from pathlib import Path
+import langchain_text_splitters
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +65,32 @@ def _get_embedding_fn():
     # Try NVIDIA NIM embeddings
     try:
         from django.conf import settings
-        nvidia_key = getattr(settings, 'NVIDIA_API_KEY', '')
+        import os
+        nvidia_key = getattr(settings, 'NVIDIA_API_KEY', os.environ.get('NVIDIA_API_KEY', ''))
         if nvidia_key:
-            import chromadb.utils.embedding_functions as ef
-            # Use Google Gemini as fallback since NVIDIA embeddings need langchain wrapper
-            gemini_key = os.environ.get('GEMINI_API_KEY', '')
-            if gemini_key:
-                return ef.GoogleGenerativeAiEmbeddingFunction(
-                    api_key=gemini_key,
-                    model_name="models/text-embedding-004"
-                )
-    except Exception:
-        pass
+            from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+
+            class NVIDIAEmbeddingFunction(EmbeddingFunction):
+                def __init__(self, api_key: str, model_name: str = "nvidia/nv-embedqa-e5-v5"):
+                    self.api_key = api_key
+                    self.model_name = model_name
+                    from openai import OpenAI
+                    self.client = OpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=self.api_key)
+
+                def name(self) -> str:
+                    return f"NVIDIAEmbeddingFunction-{self.model_name}"
+
+                def __call__(self, input: Documents) -> Embeddings:
+                    response = self.client.embeddings.create(
+                        model=self.model_name,
+                        input=input,
+                        extra_body={"input_type": "passage"}
+                    )
+                    return [data.embedding for data in response.data]
+
+            return NVIDIAEmbeddingFunction(api_key=nvidia_key)
+    except Exception as e:
+        logger.warning(f"Failed to initialize NVIDIA embeddings: {e}")
 
     # Try sentence-transformers (local, free)
     try:
@@ -147,8 +162,7 @@ def ingest_pdf_for_agents(
         _update(f"✂️  Splitting {len(raw_text):,} chars into chunks…")
 
         # LangChain text splitter — semantically aware splitting
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
-        splitter = RecursiveCharacterTextSplitter(
+        splitter = langchain_text_splitters.RecursiveCharacterTextSplitter(
             chunk_size=AGENTS_CHUNK_SIZE,
             chunk_overlap=AGENTS_CHUNK_OVERLAP,
             separators=['\n\n', '\n', '. ', ' ', ''],

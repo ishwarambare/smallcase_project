@@ -1,0 +1,148 @@
+{# stocks/templates/stocks/demand_supply.j2 #}
+{# GTF Demand-Supply Zone Scanner Dashboard #}
+{% extends 'stocks/base.j2' %}
+
+{% block title %}D&S Zone Scanner — StockBasket{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{{ static('css/pages/demand_supply.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ds-page">
+
+    {# ── Hero Section ───────────────────────────────────────── #}
+    <div class="ds-hero">
+        <div class="ds-hero-left">
+            <h1>📊 Demand-Supply Zone Scanner</h1>
+            <p>GTF-style multi-timeframe zone detection — find stocks in quarterly, monthly & weekly demand/supply zones</p>
+        </div>
+        <div class="ds-hero-right">
+            <div class="ds-scan-info" id="ds-last-scan">
+                No scan data yet
+            </div>
+            <button class="ds-btn ds-btn-primary" id="ds-scan-btn">
+                🔍 Run Scan
+            </button>
+        </div>
+    </div>
+
+    {# ── Scan Progress Bar ──────────────────────────────────── #}
+    <div class="ds-progress-bar" id="ds-progress-bar">
+        <div class="ds-progress-track">
+            <div class="ds-progress-fill" id="ds-progress-fill"></div>
+        </div>
+        <div class="ds-progress-text" id="ds-progress-text">Starting scan…</div>
+    </div>
+
+    {# ── Summary Stats ──────────────────────────────────────── #}
+    <div class="ds-summary">
+        <div class="ds-stat-card">
+            <div class="ds-stat-value blue" id="stat-total">0</div>
+            <div class="ds-stat-label">Total Scanned</div>
+        </div>
+        <div class="ds-stat-card">
+            <div class="ds-stat-value green" id="stat-demand">0</div>
+            <div class="ds-stat-label">In Demand Zone</div>
+        </div>
+        <div class="ds-stat-card">
+            <div class="ds-stat-value red" id="stat-supply">0</div>
+            <div class="ds-stat-label">In Supply Zone</div>
+        </div>
+        <div class="ds-stat-card">
+            <div class="ds-stat-value amber" id="stat-triple">0</div>
+            <div class="ds-stat-label">Triple Confirmed 🔥</div>
+        </div>
+    </div>
+
+    {# ── Sector Strength ────────────────────────────────────── #}
+    <div class="ds-sector-section">
+        <div class="ds-section-title">Sector Strength</div>
+        <div class="ds-sector-scroll" id="ds-sector-cards">
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Run a scan to see sector strength data.</p>
+        </div>
+    </div>
+
+    {# ── Filters ────────────────────────────────────────────── #}
+    <div class="ds-filters">
+        <div class="ds-filter-group">
+            <span class="ds-filter-label">Zone Type</span>
+            <select class="ds-filter-select" id="filter-zone-type">
+                <option value="demand">📈 Demand</option>
+                <option value="supply">📉 Supply</option>
+            </select>
+        </div>
+
+        <div class="ds-filter-group">
+            <span class="ds-filter-label">Min Overlap</span>
+            <select class="ds-filter-select" id="filter-overlap">
+                <option value="0">All</option>
+                <option value="1">≥ 1 TF</option>
+                <option value="2">≥ 2 TF</option>
+                <option value="3">3 TF (Triple)</option>
+            </select>
+        </div>
+
+        <div class="ds-filter-group">
+            <span class="ds-filter-label">Sector</span>
+            <select class="ds-filter-select" id="filter-sector">
+                <option value="">All Sectors</option>
+            </select>
+        </div>
+
+        <button class="ds-filter-toggle" id="filter-fresh">
+            ✨ Fresh Only
+        </button>
+
+        <div class="ds-filter-spacer"></div>
+    </div>
+
+    {# ── Screener Table ─────────────────────────────────────── #}
+    <div class="ds-table-wrapper" id="ds-table-wrapper" style="display: none;">
+        <table class="ds-table">
+            <thead>
+                <tr>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Sector</th>
+                    <th title="Quarterly Zone">QTR</th>
+                    <th title="Monthly Zone">MTH</th>
+                    <th title="Weekly Zone">WK</th>
+                    <th title="Demand Overlap Count">D-Overlap</th>
+                    <th title="Supply Overlap Count">S-Overlap</th>
+                    <th title="Strongest Zone Score">Strength</th>
+                </tr>
+            </thead>
+            <tbody id="ds-table-body">
+            </tbody>
+        </table>
+    </div>
+
+    {# ── Empty State ────────────────────────────────────────── #}
+    <div class="ds-empty" id="ds-empty-state">
+        <div class="ds-empty-icon">🔍</div>
+        <h3>No scan results yet</h3>
+        <p>Click "Run Scan" to analyze all your stocks for demand & supply zones across quarterly, monthly, and weekly timeframes.</p>
+        <button class="ds-btn ds-btn-primary" onclick="document.getElementById('ds-scan-btn').click()">
+            🚀 Start First Scan
+        </button>
+    </div>
+
+    {# ── Stock Detail Modal ─────────────────────────────────── #}
+    <div class="ds-modal-overlay" id="ds-modal-overlay">
+        <div class="ds-modal">
+            <div class="ds-modal-header">
+                <h2 id="ds-modal-title">Stock Zone Detail</h2>
+                <button class="ds-modal-close" id="ds-modal-close">✕</button>
+            </div>
+            <div class="ds-modal-body" id="ds-modal-body">
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script src="{{ static('js/pages/demand-supply.js') }}"></script>
+{% endblock %}

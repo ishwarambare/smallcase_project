@@ -529,7 +529,10 @@
 
     {# ---- Price Chart ---- #}
     <div class="detail-section">
-        <div class="section-heading">📈 Price History</div>
+        <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>📈 Price History</span>
+            <span id="chart-cagr" style="font-size: 0.85em; font-weight: normal; color: var(--text-secondary); display: none;"></span>
+        </div>
         <div class="period-btns">
             {% for p, label in [('1d','1D'),('7d','1W'),('1m','1M'),('3m','3M'),('6m','6M'),('1y','1Y')] %}
             <button class="period-btn-detail {% if p == '1m' %}active{% endif %}" data-period="{{ p }}">{{ label }}</button>
@@ -1092,11 +1095,36 @@ async function loadChart(period) {
             errDiv.textContent = 'No chart data available for this period.';
             errDiv.style.display = 'block';
             loading.style.display = 'none';
+            document.getElementById('chart-cagr').style.display = 'none';
             return;
         }
 
         loading.style.display = 'none';
         canvas.style.display  = 'block';
+
+        // Calculate and display CAGR
+        const cagrSpan = document.getElementById('chart-cagr');
+        let years = null;
+        if (period === '1y') years = 1;
+        else if (period === '3y') years = 3;
+        else if (period === '5y') years = 5;
+        else if (period === '6m') years = 0.5;
+
+        if (years && data.prices && data.prices.length > 0) {
+            const startPrice = data.prices[0];
+            const endPrice = data.prices[data.prices.length - 1];
+            if (startPrice > 0) {
+                // If years < 1 (like 6m), we often just show absolute return or annualized.
+                // For 6m, standard practice is to show absolute or annualized return. We'll show annualized CAGR.
+                const cagr = ((endPrice / startPrice) ** (1 / years) - 1) * 100;
+                cagrSpan.innerHTML = `<strong>CAGR:</strong> <span class="${cagr >= 0 ? 'positive' : 'negative'}">${cagr >= 0 ? '+' : ''}${cagr.toFixed(2)}%</span>`;
+                cagrSpan.style.display = 'inline';
+            } else {
+                cagrSpan.style.display = 'none';
+            }
+        } else {
+            cagrSpan.style.display = 'none';
+        }
 
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const lineColor = '#3b82f6';

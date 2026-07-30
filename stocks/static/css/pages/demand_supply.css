@@ -1,0 +1,807 @@
+/* ========================================
+   DEMAND-SUPPLY ZONE SCANNER — Premium Dark Dashboard
+   ======================================== */
+
+/* ── Page Layout ────────────────────────────────────────────── */
+.ds-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem 0.5rem 3rem;
+}
+
+/* ── Hero Section ────────────────────────────────────────────── */
+.ds-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem 2rem;
+    background: linear-gradient(135deg, var(--card-bg) 0%, var(--container-bg) 100%);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.ds-hero-left h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #10b981, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.25rem;
+}
+
+.ds-hero-left p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.ds-hero-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.ds-scan-info {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.ds-scan-info .last-scan-time {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.ds-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.4rem;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+.ds-btn-primary {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.ds-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.ds-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.ds-btn-secondary {
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+}
+
+.ds-btn-secondary:hover {
+    background: var(--table-hover);
+}
+
+.ds-btn-sm {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.78rem;
+}
+
+/* ── Scan Progress ────────────────────────────────────────────── */
+.ds-progress-bar {
+    display: none;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+}
+
+.ds-progress-bar.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+.ds-progress-track {
+    width: 100%;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.ds-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #3b82f6);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+.ds-progress-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.ds-progress-text span {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* ── Sector Strength Cards ─────────────────────────────────── */
+.ds-sector-section {
+    margin-bottom: 2rem;
+}
+
+.ds-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ds-sector-scroll {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ds-sector-scroll::-webkit-scrollbar {
+    height: 4px;
+}
+
+.ds-sector-scroll::-webkit-scrollbar-track {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+.ds-sector-scroll::-webkit-scrollbar-thumb {
+    background: var(--text-secondary);
+    border-radius: 2px;
+}
+
+.ds-sector-card {
+    min-width: 220px;
+    padding: 1.25rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.ds-sector-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #10b981, #3b82f6);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.ds-sector-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: #10b981;
+}
+
+.ds-sector-card:hover::before {
+    opacity: 1;
+}
+
+.ds-sector-card.active {
+    border-color: #10b981;
+}
+
+.ds-sector-card.active::before {
+    opacity: 1;
+}
+
+.ds-sector-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.ds-sector-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.ds-sector-stat {
+    text-align: center;
+}
+
+.ds-sector-stat .value {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.ds-sector-stat .value.demand {
+    color: #10b981;
+}
+
+.ds-sector-stat .value.supply {
+    color: #ef4444;
+}
+
+.ds-sector-stat .label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ds-sector-bar {
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.ds-sector-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.ds-sector-bar-fill.demand {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.ds-sector-bar-fill.supply {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+/* ── Filter Bar ─────────────────────────────────────────────── */
+.ds-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+}
+
+.ds-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ds-filter-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.ds-filter-select {
+    padding: 0.4rem 0.75rem;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.ds-filter-select:hover,
+.ds-filter-select:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.ds-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.ds-filter-toggle.active {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #10b981;
+    color: #10b981;
+}
+
+.ds-filter-spacer {
+    flex: 1;
+}
+
+/* ── Summary Stats ─────────────────────────────────────────── */
+.ds-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.ds-stat-card {
+    padding: 1rem 1.25rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    text-align: center;
+}
+
+.ds-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+}
+
+.ds-stat-value.green { color: #10b981; }
+.ds-stat-value.red { color: #ef4444; }
+.ds-stat-value.blue { color: #3b82f6; }
+.ds-stat-value.amber { color: #f59e0b; }
+
+.ds-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ── Screener Table ────────────────────────────────────────── */
+.ds-table-wrapper {
+    overflow-x: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.ds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.ds-table thead th {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--card-border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.ds-table thead th:hover {
+    color: var(--text-primary);
+}
+
+.ds-table thead th.sorted {
+    color: #3b82f6;
+}
+
+.ds-table tbody tr {
+    border-bottom: 1px solid var(--card-border);
+    transition: background 0.15s ease;
+    cursor: pointer;
+}
+
+.ds-table tbody tr:hover {
+    background: var(--table-hover);
+}
+
+.ds-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.ds-table td {
+    padding: 0.75rem 1rem;
+    white-space: nowrap;
+}
+
+.ds-table .stock-symbol {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ds-table .stock-name {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.ds-table .stock-sector {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0.2rem 0.6rem;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.ds-table .price {
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Zone indicator badges */
+.zone-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.zone-badge.demand {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.zone-badge.supply {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.zone-badge.none {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+/* Overlap count badge */
+.overlap-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.overlap-badge.triple {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.overlap-badge.double {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.overlap-badge.single {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.overlap-badge.zero {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--text-secondary);
+}
+
+/* Strength score bar */
+.strength-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.strength-bar {
+    width: 60px;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.strength-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.strength-bar-fill.high {
+    background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.strength-bar-fill.medium {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.strength-bar-fill.low {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.strength-score {
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 24px;
+}
+
+/* Fresh badge */
+.fresh-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.fresh-badge.fresh {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+}
+
+.fresh-badge.tested {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+
+/* ── Empty State ────────────────────────────────────────────── */
+.ds-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-secondary);
+}
+
+.ds-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.ds-empty h3 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.ds-empty p {
+    font-size: 0.85rem;
+    max-width: 400px;
+    margin: 0 auto 1.5rem;
+}
+
+/* ── Stock Detail Modal ────────────────────────────────────── */
+.ds-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.ds-modal-overlay.active {
+    display: flex;
+    animation: fadeIn 0.2s ease;
+}
+
+.ds-modal {
+    width: 100%;
+    max-width: 700px;
+    max-height: 80vh;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+}
+
+.ds-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--card-border);
+    position: sticky;
+    top: 0;
+    background: var(--card-bg);
+    z-index: 1;
+}
+
+.ds-modal-header h2 {
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ds-modal-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: var(--table-hover);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.ds-modal-close:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+}
+
+.ds-modal-body {
+    padding: 1.5rem;
+}
+
+.ds-zone-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.ds-zone-item {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    background: var(--container-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+}
+
+.ds-zone-item:hover {
+    border-color: var(--text-secondary);
+}
+
+.ds-zone-tf {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.ds-zone-range {
+    font-variant-numeric: tabular-nums;
+}
+
+.ds-zone-range .proximal {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ds-zone-range .distal {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.ds-zone-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35); }
+    50% { box-shadow: 0 2px 16px rgba(16, 185, 129, 0.55); }
+}
+
+/* Spinner */
+.ds-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .ds-hero {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .ds-hero-right {
+        flex-direction: column;
+    }
+
+    .ds-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ds-filter-group {
+        width: 100%;
+    }
+
+    .ds-filter-select {
+        flex: 1;
+    }
+
+    .ds-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .ds-modal {
+        max-width: 100%;
+        max-height: 90vh;
+        margin: 1rem;
+    }
+}

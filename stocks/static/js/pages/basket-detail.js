@@ -378,6 +378,24 @@ function renderChart(data) {
 
         document.getElementById('basket-return').textContent = 'Return: ' + (basketReturn >= 0 ? '+' : '') + basketReturn.toFixed(2) + '%';
         document.getElementById('nifty-return').textContent = 'Return: ' + (niftyReturn >= 0 ? '+' : '') + niftyReturn.toFixed(2) + '%';
+
+        // Calculate CAGR dynamically
+        if (data.labels && data.labels.length > 0) {
+            const startDate = new Date(data.labels[0]);
+            const endDate = new Date(data.labels[data.labels.length - 1]);
+            const years = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365.25);
+            
+            if (years >= 0.45) { // Roughly 6m or more
+                const bVal = Math.max(0.0001, basketFinal / 100);
+                const nVal = Math.max(0.0001, niftyFinal / 100);
+                const basketCagr = ((bVal) ** (1 / years) - 1) * 100;
+                const niftyCagr = ((nVal) ** (1 / years) - 1) * 100;
+                const yearLabel = years >= 0.9 ? years.toFixed(1) + 'y' : '6m';
+                
+                document.getElementById('basket-return').innerHTML += ` <span style="color:var(--text-secondary); margin-left: 8px; font-size:0.9em; border-left: 1px solid var(--border-color); padding-left: 8px;">CAGR (${yearLabel}): <span class="${basketCagr >= 0 ? 'positive' : 'negative'}">${basketCagr >= 0 ? '+' : ''}${basketCagr.toFixed(2)}%</span></span>`;
+                document.getElementById('nifty-return').innerHTML += ` <span style="color:var(--text-secondary); margin-left: 8px; font-size:0.9em; border-left: 1px solid var(--border-color); padding-left: 8px;">CAGR (${yearLabel}): <span class="${niftyCagr >= 0 ? 'positive' : 'negative'}">${niftyCagr >= 0 ? '+' : ''}${niftyCagr.toFixed(2)}%</span></span>`;
+            }
+        }
     }
 }
 

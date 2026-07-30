@@ -1,0 +1,850 @@
+"""
+stocks/demand_supply.py
+
+GTF-style Demand-Supply Zone Detection Engine
+==============================================
+
+Implements the Get Together Finance (GTF) methodology for identifying
+institutional demand and supply zones across multiple timeframes.
+
+Core concepts:
+  - Demand Zone: A base (consolidation) before a strong impulsive UP-move
+  - Supply Zone: A base (consolidation) before a strong impulsive DOWN-move
+  - Zone = rectangle from low-of-base to high-of-base
+  - Proximal line = edge closest to current price (entry trigger)
+  - Distal line = edge furthest from current price (stop-loss reference)
+
+Scoring factors (GTF-aligned):
+  1. Freshness — price hasn't returned to test the zone since formation (+30)
+  2. Base tightness — fewer candles in the base = stronger zone (+25)
+  3. Move strength — % move away and volume spike (+25)
+  4. Multi-timeframe alignment — zone confirmed on higher TF too (+20)
+"""
+
+import logging
+import math
+from datetime import datetime, timedelta, date
+from decimal import Decimal
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Constants
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Minimum % move away from base to qualify as an impulsive move
+MIN_IMPULSE_MOVE_PCT = 1.5
+
+# Maximum candles allowed in a base (GTF prefers 1-3)
+MAX_BASE_CANDLES = 5
+
+# How close price needs to be to a zone to count as "in zone" (%)
+ZONE_PROXIMITY_PCT = 5.0
+
+# Lookback for swing detection
+SWING_LOOKBACK = 2
+
+# Sector mapping for popular Indian stocks (yfinance fallback)
+SECTOR_MAP = {
+    # IT
+    'TCS': 'IT', 'INFY': 'IT', 'WIPRO': 'IT', 'HCLTECH': 'IT',
+    'TECHM': 'IT', 'LTIM': 'IT', 'PERSISTENT': 'IT', 'COFORGE': 'IT',
+    'MPHASIS': 'IT', 'LTTS': 'IT',
+    # Banking
+    'HDFCBANK': 'Banking', 'ICICIBANK': 'Banking', 'SBIN': 'Banking',
+    'KOTAKBANK': 'Banking', 'AXISBANK': 'Banking', 'INDUSINDBK': 'Banking',
+    'BANKBARODA': 'Banking', 'PNB': 'Banking', 'IDFCFIRSTB': 'Banking',
+    'FEDERALBNK': 'Banking', 'BANDHANBNK': 'Banking',
+    # NBFC / Financial Services
+    'BAJFINANCE': 'Financial Services', 'BAJAJFINSV': 'Financial Services',
+    'CHOLAFIN': 'Financial Services', 'MUTHOOTFIN': 'Financial Services',
+    'M&MFIN': 'Financial Services', 'SHRIRAMFIN': 'Financial Services',
+    'CDSL': 'Financial Services', 'CAMS': 'Financial Services',
+    # Pharma
+    'SUNPHARMA': 'Pharma', 'DRREDDY': 'Pharma', 'CIPLA': 'Pharma',
+    'DIVISLAB': 'Pharma', 'AUROPHARMA': 'Pharma', 'LUPIN': 'Pharma',
+    'BIOCON': 'Pharma', 'TORNTPHARM': 'Pharma', 'ALKEM': 'Pharma',
+    # Auto
+    'MARUTI': 'Auto', 'TATAMOTORS': 'Auto', 'M&M': 'Auto',
+    'BAJAJ-AUTO': 'Auto', 'HEROMOTOCO': 'Auto', 'EICHERMOT': 'Auto',
+    'ASHOKLEY': 'Auto', 'TVSMOTOR': 'Auto',
+    # Energy / Oil & Gas
+    'RELIANCE': 'Energy', 'ONGC': 'Energy', 'IOC': 'Energy',
+    'BPCL': 'Energy', 'GAIL': 'Energy', 'NTPC': 'Energy',
+    'POWERGRID': 'Energy', 'TATAPOWER': 'Energy', 'ADANIGREEN': 'Energy',
+    # Metal / Mining
+    'TATASTEEL': 'Metals', 'HINDALCO': 'Metals', 'JSWSTEEL': 'Metals',
+    'VEDL': 'Metals', 'COALINDIA': 'Metals', 'NMDC': 'Metals',
+    # Infra / Capital Goods
+    'LT': 'Infrastructure', 'ADANIENT': 'Infrastructure',
+    'ADANIPORTS': 'Infrastructure', 'SIEMENS': 'Infrastructure',
+    'ABB': 'Infrastructure', 'BEL': 'Infrastructure',
+    'HAL': 'Infrastructure', 'CGPOWER': 'Infrastructure',
+    # FMCG
+    'HINDUNILVR': 'FMCG', 'ITC': 'FMCG', 'NESTLEIND': 'FMCG',
+    'BRITANNIA': 'FMCG', 'DABUR': 'FMCG', 'MARICO': 'FMCG',
+    'GODREJCP': 'FMCG', 'COLPAL': 'FMCG', 'TATACONSUM': 'FMCG',
+    # Cement
+    'ULTRACEMCO': 'Cement', 'SHREECEM': 'Cement', 'AMBUJACEM': 'Cement',
+    'ACC': 'Cement', 'RAMCOCEM': 'Cement',
+    # Real Estate
+    'DLF': 'Real Estate', 'GODREJPROP': 'Real Estate',
+    'OBEROIRLTY': 'Real Estate', 'PRESTIGE': 'Real Estate',
+    # Telecom
+    'BHARTIARTL': 'Telecom', 'IDEA': 'Telecom',
+    # Insurance
+    'HDFCLIFE': 'Insurance', 'SBILIFE': 'Insurance',
+    'ICICIPRULI': 'Insurance', 'LICI': 'Insurance',
+    # Consumer Durables
+    'TITAN': 'Consumer', 'ASIANPAINT': 'Consumer',
+    'PIDILITIND': 'Consumer', 'HAVELLS': 'Consumer',
+    'VOLTAS': 'Consumer', 'WHIRLPOOL': 'Consumer',
+    # Defence / Shipbuilding
+    'MAZDOCK': 'Defence', 'GRSE': 'Defence', 'COCHINSHIP': 'Defence',
+    # Hotels
+    'INDHOTEL': 'Hotels', 'CHALET': 'Hotels',
+    # Chemicals
+    'PIIND': 'Chemicals', 'ATUL': 'Chemicals', 'DEEPAKNTR': 'Chemicals',
+    'CHAMBLFERT': 'Chemicals',
+}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Candle Data Helpers
+# ═════════════════════════════════════════════════════════════════════════════
+
+def candles_to_dataframe(candles: list[dict]) -> pd.DataFrame:
+    """
+    Convert Fyers-format candle list to a DataFrame.
+    Input:  [{'time': epoch, 'open': f, 'high': f, 'low': f, 'close': f, 'volume': i}, ...]
+    Output: DataFrame with columns [open, high, low, close, volume, date] indexed by time.
+    """
+    if not candles:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(candles)
+    if 'time' in df.columns:
+        df['date'] = pd.to_datetime(df['time'], unit='s')
+        df.set_index('date', inplace=True)
+    df = df.sort_index()
+    # Drop rows with NaN in OHLC columns (e.g. incomplete today's data from yfinance)
+    df = df.dropna(subset=['open', 'high', 'low', 'close'])
+    return df
+
+
+def resample_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+    """
+    Resample daily OHLCV data to weekly/monthly/quarterly.
+    """
+    tf_map = {
+        'weekly': 'W',
+        'monthly': 'ME',
+        'quarterly': 'QE',
+        'daily': 'D',
+    }
+    rule = tf_map.get(timeframe, 'D')
+    if rule == 'D':
+        return df
+
+    resampled = df.resample(rule).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum',
+    }).dropna()
+
+    return resampled
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Core Zone Detection
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _candle_body_pct(row) -> float:
+    """Returns the body size as a % of the candle range."""
+    rng = row['high'] - row['low']
+    if rng == 0:
+        return 0
+    return abs(row['close'] - row['open']) / rng * 100
+
+
+def _is_small_candle(row, avg_range: float) -> bool:
+    """A candle is 'small' if its range is less than 75% of the average range."""
+    candle_range = row['high'] - row['low']
+    return candle_range < (avg_range * 0.75)
+
+
+def _is_strong_move(row, avg_range: float, multiplier: float = 1.0) -> bool:
+    """A candle is a 'strong move' if its range exceeds multiplier x avg_range."""
+    candle_range = row['high'] - row['low']
+    return candle_range > (avg_range * multiplier)
+
+
+def find_demand_zones(df: pd.DataFrame) -> list[dict]:
+    """
+    Find demand zones in OHLCV data.
+
+    A demand zone forms when:
+    1. There's a consolidation (base) of 1-5 small candles
+    2. Followed by a strong impulsive UP-move (breakout candle)
+    3. The base rectangle (low of base → high of base) is the demand zone
+
+    Returns list of zone dicts:
+        {
+            'proximal': float,     # Top of zone (closest to price for demand)
+            'distal': float,       # Bottom of zone (furthest from price)
+            'formed_date': str,    # ISO date when zone formed
+            'base_candles': int,   # Number of candles in the base
+            'move_pct': float,     # % move away from zone
+            'move_volume': int,    # Volume on breakout candle
+            'is_fresh': bool,      # Price hasn't returned to zone
+        }
+    """
+    if df.empty or len(df) < 5:
+        return []
+
+    zones = []
+    avg_range = (df['high'] - df['low']).mean()
+    if avg_range == 0:
+        return []
+
+    data = df.reset_index()
+
+    for i in range(SWING_LOOKBACK, len(data) - 1):
+        breakout = data.iloc[i]
+
+        # Check if this candle is a strong bullish move
+        if not _is_strong_move(breakout, avg_range, 1.0):
+            continue
+        if breakout['close'] <= breakout['open']:
+            continue  # Must be a green (bullish) candle
+
+        move_pct = ((breakout['close'] - breakout['open']) / breakout['open']) * 100
+        if move_pct < 0.5:  # Very relaxed threshold to capture more zones
+            continue
+
+        # Look backwards for the base (consolidation)
+        base_start = max(0, i - MAX_BASE_CANDLES)
+        base_candles = []
+
+        for j in range(i - 1, base_start - 1, -1):
+            candle = data.iloc[j]
+            if _is_small_candle(candle, avg_range):
+                base_candles.insert(0, candle)
+            else:
+                break
+
+        if len(base_candles) < 1:
+            continue
+
+        # Zone = low of base to high of base
+        base_lows = [c['low'] for c in base_candles]
+        base_highs = [c['high'] for c in base_candles]
+        zone_distal = min(base_lows)   # Bottom of zone
+        zone_proximal = max(base_highs)  # Top of zone
+
+        if zone_proximal <= zone_distal:
+            continue
+
+        # Check if zone is fresh (price hasn't returned since formation)
+        is_fresh = True
+        future_data = data.iloc[i + 1:]
+        for _, future_candle in future_data.iterrows():
+            if future_candle['low'] <= zone_proximal:
+                is_fresh = False
+                break
+
+        # Get the formed date
+        formed_date = base_candles[0].get('date', data.iloc[i].get('date'))
+        if hasattr(formed_date, 'isoformat'):
+            formed_date = formed_date.isoformat()[:10]
+        else:
+            formed_date = str(formed_date)[:10]
+
+        zones.append({
+            'proximal': round(float(zone_proximal), 2),
+            'distal': round(float(zone_distal), 2),
+            'formed_date': formed_date,
+            'base_candles': len(base_candles),
+            'move_pct': round(float(move_pct), 2),
+            'move_volume': int(breakout.get('volume', 0)),
+            'is_fresh': is_fresh,
+        })
+
+    # De-duplicate overlapping zones — keep the strongest
+    zones = _dedup_zones(zones)
+    return zones
+
+
+def find_supply_zones(df: pd.DataFrame) -> list[dict]:
+    """
+    Find supply zones — mirror of demand zone logic.
+
+    A supply zone forms when:
+    1. There's a consolidation (base) of 1-5 small candles
+    2. Followed by a strong impulsive DOWN-move (breakdown candle)
+    3. The base rectangle is the supply zone
+
+    Returns list of zone dicts with same schema as demand zones.
+    """
+    if df.empty or len(df) < 5:
+        return []
+
+    zones = []
+    avg_range = (df['high'] - df['low']).mean()
+    if avg_range == 0:
+        return []
+
+    data = df.reset_index()
+
+    for i in range(SWING_LOOKBACK, len(data) - 1):
+        breakdown = data.iloc[i]
+
+        # Check if this candle is a strong bearish move
+        if not _is_strong_move(breakdown, avg_range, 1.0):
+            continue
+        if breakdown['close'] >= breakdown['open']:
+            continue  # Must be a red (bearish) candle
+
+        move_pct = ((breakdown['open'] - breakdown['close']) / breakdown['open']) * 100
+        if move_pct < 0.5:
+            continue
+
+        # Look backwards for the base
+        base_start = max(0, i - MAX_BASE_CANDLES)
+        base_candles = []
+
+        for j in range(i - 1, base_start - 1, -1):
+            candle = data.iloc[j]
+            if _is_small_candle(candle, avg_range):
+                base_candles.insert(0, candle)
+            else:
+                break
+
+        if len(base_candles) < 1:
+            continue
+
+        # Zone = low of base to high of base
+        base_lows = [c['low'] for c in base_candles]
+        base_highs = [c['high'] for c in base_candles]
+        zone_distal = max(base_highs)   # Top of zone (furthest from price for supply)
+        zone_proximal = min(base_lows)   # Bottom of zone (closest to price)
+
+        if zone_distal <= zone_proximal:
+            continue
+
+        # Check freshness
+        is_fresh = True
+        future_data = data.iloc[i + 1:]
+        for _, future_candle in future_data.iterrows():
+            if future_candle['high'] >= zone_proximal:
+                is_fresh = False
+                break
+
+        formed_date = base_candles[0].get('date', data.iloc[i].get('date'))
+        if hasattr(formed_date, 'isoformat'):
+            formed_date = formed_date.isoformat()[:10]
+        else:
+            formed_date = str(formed_date)[:10]
+
+        zones.append({
+            'proximal': round(float(zone_proximal), 2),
+            'distal': round(float(zone_distal), 2),
+            'formed_date': formed_date,
+            'base_candles': len(base_candles),
+            'move_pct': round(float(move_pct), 2),
+            'move_volume': int(breakdown.get('volume', 0)),
+            'is_fresh': is_fresh,
+        })
+
+    zones = _dedup_zones(zones)
+    return zones
+
+
+def _dedup_zones(zones: list[dict], overlap_threshold_pct: float = 2.0) -> list[dict]:
+    """
+    Remove overlapping zones, keeping the one with stronger move_pct.
+    Two zones 'overlap' if their proximal lines are within overlap_threshold_pct.
+    """
+    if not zones:
+        return zones
+
+    zones.sort(key=lambda z: z['proximal'])
+    deduped = [zones[0]]
+
+    for z in zones[1:]:
+        prev = deduped[-1]
+        mid_prev = (prev['proximal'] + prev['distal']) / 2
+        mid_curr = (z['proximal'] + z['distal']) / 2
+
+        if mid_prev == 0:
+            deduped.append(z)
+            continue
+
+        overlap_pct = abs(mid_curr - mid_prev) / mid_prev * 100
+        if overlap_pct < overlap_threshold_pct:
+            # Keep the stronger zone
+            if z['move_pct'] > prev['move_pct']:
+                deduped[-1] = z
+        else:
+            deduped.append(z)
+
+    return deduped
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Zone Strength Scoring
+# ═════════════════════════════════════════════════════════════════════════════
+
+def score_zone_strength(zone: dict, avg_volume: float = 0) -> int:
+    """
+    Score a zone's strength from 0-100 based on GTF criteria.
+
+    Scoring breakdown:
+        Freshness        → 0 or 30 points
+        Base tightness   → 5-25 points (fewer candles = better)
+        Move strength    → 5-25 points (bigger % move = better)
+        Volume spike     → 0-20 points (above-average volume on breakout)
+    """
+    score = 0
+
+    # 1. Freshness (30 points)
+    if zone.get('is_fresh', False):
+        score += 30
+
+    # 2. Base tightness (25 points max)
+    base_count = zone.get('base_candles', 3)
+    if base_count <= 1:
+        score += 25
+    elif base_count <= 2:
+        score += 20
+    elif base_count <= 3:
+        score += 15
+    elif base_count <= 4:
+        score += 10
+    else:
+        score += 5
+
+    # 3. Move strength (25 points max)
+    move_pct = abs(zone.get('move_pct', 0))
+    if move_pct >= 8:
+        score += 25
+    elif move_pct >= 5:
+        score += 20
+    elif move_pct >= 3:
+        score += 15
+    elif move_pct >= 2:
+        score += 10
+    else:
+        score += 5
+
+    # 4. Volume (20 points max)
+    if avg_volume > 0 and zone.get('move_volume', 0) > 0:
+        vol_ratio = zone['move_volume'] / avg_volume
+        if vol_ratio >= 2.0:
+            score += 20
+        elif vol_ratio >= 1.5:
+            score += 15
+        elif vol_ratio >= 1.0:
+            score += 10
+        else:
+            score += 5
+    else:
+        score += 10  # Neutral if no volume data
+
+    return min(score, 100)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Price-in-Zone Check
+# ═════════════════════════════════════════════════════════════════════════════
+
+def is_price_in_demand_zone(current_price: float, zone: dict, threshold_pct: float = ZONE_PROXIMITY_PCT) -> bool:
+    """Check if current price is within threshold_pct of a demand zone's proximal line (top)."""
+    proximal = zone['proximal']
+    distal = zone['distal']
+    # Price is "in zone" if it's between distal and proximal + threshold
+    upper_bound = proximal * (1 + threshold_pct / 100)
+    return distal <= current_price <= upper_bound
+
+
+def is_price_in_supply_zone(current_price: float, zone: dict, threshold_pct: float = ZONE_PROXIMITY_PCT) -> bool:
+    """Check if current price is within threshold_pct of a supply zone's proximal line (bottom)."""
+    proximal = zone['proximal']
+    distal = zone['distal']
+    # For supply: proximal is bottom, distal is top
+    lower_bound = proximal * (1 - threshold_pct / 100)
+    return lower_bound <= current_price <= distal
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Multi-Timeframe Scanner
+# ═════════════════════════════════════════════════════════════════════════════
+
+def scan_stock_zones(symbol: str, fyers_svc=None) -> dict:
+    """
+    Scan a single stock for demand/supply zones across quarterly, monthly, weekly timeframes.
+
+    Uses Fyers API for historical candle data if available, falls back to yfinance.
+
+    Returns:
+        {
+            'symbol': str,
+            'name': str,
+            'sector': str,
+            'current_price': float,
+            'demand_zones': {'quarterly': [...], 'monthly': [...], 'weekly': [...]},
+            'supply_zones': {'quarterly': [...], 'monthly': [...], 'weekly': [...]},
+            'demand_overlap_count': int,
+            'supply_overlap_count': int,
+            'quarterly_demand': bool,
+            'monthly_demand': bool,
+            'weekly_demand': bool,
+            'quarterly_supply': bool,
+            'monthly_supply': bool,
+            'weekly_supply': bool,
+            'strongest_zone_score': int,
+            'zone_details': dict,  # Full JSON for UI
+        }
+    """
+    clean_symbol = symbol.replace('.NS', '').replace('.BO', '').strip().upper()
+    logger.info("Scanning zones for %s", clean_symbol)
+
+    # Fetch daily candle data (730 days for quarterly context)
+    candles = _fetch_candles(clean_symbol, fyers_svc, days=730)
+    if not candles:
+        logger.warning("No candle data for %s, skipping", clean_symbol)
+        return None
+
+    df = candles_to_dataframe(candles)
+    if df.empty:
+        return None
+
+    # Get current price
+    current_price = float(df['close'].iloc[-1])
+
+    # Average volume for scoring
+    avg_volume = float(df['volume'].mean()) if 'volume' in df.columns else 0
+
+    # Resample to different timeframes
+    df_weekly = resample_to_timeframe(df, 'weekly')
+    df_monthly = resample_to_timeframe(df, 'monthly')
+    df_quarterly = resample_to_timeframe(df, 'quarterly')
+
+    # Find zones for each timeframe
+    result = {
+        'demand_zones': {},
+        'supply_zones': {},
+    }
+
+    for tf_name, tf_df in [('weekly', df_weekly), ('monthly', df_monthly), ('quarterly', df_quarterly)]:
+        d_zones = find_demand_zones(tf_df)
+        s_zones = find_supply_zones(tf_df)
+
+        # Score each zone
+        for z in d_zones:
+            z['strength_score'] = score_zone_strength(z, avg_volume)
+            z['timeframe'] = tf_name
+        for z in s_zones:
+            z['strength_score'] = score_zone_strength(z, avg_volume)
+            z['timeframe'] = tf_name
+
+        result['demand_zones'][tf_name] = d_zones
+        result['supply_zones'][tf_name] = s_zones
+
+    # Calculate overlap counts
+    demand_overlap = 0
+    supply_overlap = 0
+
+    q_demand = False
+    m_demand = False
+    w_demand = False
+    q_supply = False
+    m_supply = False
+    w_supply = False
+
+    for tf in ['quarterly', 'monthly', 'weekly']:
+        for z in result['demand_zones'].get(tf, []):
+            if is_price_in_demand_zone(current_price, z):
+                demand_overlap += 1
+                if tf == 'quarterly':
+                    q_demand = True
+                elif tf == 'monthly':
+                    m_demand = True
+                elif tf == 'weekly':
+                    w_demand = True
+                break  # Count each timeframe once
+
+        for z in result['supply_zones'].get(tf, []):
+            if is_price_in_supply_zone(current_price, z):
+                supply_overlap += 1
+                if tf == 'quarterly':
+                    q_supply = True
+                elif tf == 'monthly':
+                    m_supply = True
+                elif tf == 'weekly':
+                    w_supply = True
+                break
+
+    # Strongest zone score
+    all_zone_scores = []
+    for tf_zones in result['demand_zones'].values():
+        all_zone_scores.extend(z.get('strength_score', 0) for z in tf_zones)
+    for tf_zones in result['supply_zones'].values():
+        all_zone_scores.extend(z.get('strength_score', 0) for z in tf_zones)
+    strongest_score = max(all_zone_scores) if all_zone_scores else 0
+
+    # Get stock info
+    sector = SECTOR_MAP.get(clean_symbol, '')
+    name = clean_symbol
+
+    # Try to get name and sector from yfinance if not in map
+    if not sector:
+        sector = _get_sector_yfinance(clean_symbol)
+
+    return {
+        'symbol': clean_symbol,
+        'name': name,
+        'sector': sector,
+        'current_price': round(current_price, 2),
+        'demand_zones': result['demand_zones'],
+        'supply_zones': result['supply_zones'],
+        'demand_overlap_count': demand_overlap,
+        'supply_overlap_count': supply_overlap,
+        'quarterly_demand': q_demand,
+        'monthly_demand': m_demand,
+        'weekly_demand': w_demand,
+        'quarterly_supply': q_supply,
+        'monthly_supply': m_supply,
+        'weekly_supply': w_supply,
+        'strongest_zone_score': strongest_score,
+        'zone_details': result,
+    }
+
+
+def _fetch_candles(symbol: str, fyers_svc=None, days: int = 730) -> list[dict]:
+    """
+    Fetch daily OHLCV candles. Tries Fyers first, falls back to yfinance.
+    """
+    # Try Fyers first
+    if fyers_svc and fyers_svc.is_active:
+        print("Fyers data available, trying to fetch data from Fyers")
+        try:
+            fyers_symbol = f'NSE:{symbol}-EQ'
+            date_to = datetime.today().strftime('%Y-%m-%d')
+            date_from = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+            candles = fyers_svc.get_historical_candles(
+                symbol=fyers_symbol,
+                resolution='D',
+                date_from=date_from,
+                date_to=date_to,
+            )
+            if candles:
+                logger.info("Fetched %d candles from Fyers for %s", len(candles), symbol)
+                return candles
+        except Exception as e:
+            print("Fyers fetch failed for", symbol, "error:", e)
+            logger.warning("Fyers fetch failed for %s: %s, falling back to yfinance", symbol, e)
+
+    # Fallback to yfinance
+    try:
+        print("Using yfinance to fetch data")
+        import yfinance as yf
+        yf_symbol = f"{symbol}.NS"
+
+        # Use period parameter for simplicity
+        period = '2y' if days > 365 else '1y'
+        ticker = yf.Ticker(yf_symbol)
+        hist = ticker.history(period=period, auto_adjust=True)
+
+        if hist.empty:
+            return []
+
+        candles = []
+        for idx, row in hist.iterrows():
+            candles.append({
+                'time': int(idx.timestamp()),
+                'open': float(row['Open']),
+                'high': float(row['High']),
+                'low': float(row['Low']),
+                'close': float(row['Close']),
+                'volume': int(row['Volume']),
+            })
+        logger.info("Fetched %d candles from yfinance for %s", len(candles), symbol)
+        return candles
+    except Exception as e:
+        logger.warning("yfinance fetch also failed for %s: %s", symbol, e)
+        return []
+
+
+def _get_sector_yfinance(symbol: str) -> str:
+    """Get sector info from yfinance (cached per session)."""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(f"{symbol}.NS")
+        info = ticker.info or {}
+        return info.get('sector', 'Unknown')
+    except Exception:
+        return 'Unknown'
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Sector Strength Analysis
+# ═════════════════════════════════════════════════════════════════════════════
+
+def analyze_sector_strength(scan_results: list[dict]) -> list[dict]:
+    """
+    Analyze sector strength from a list of scanned stock results.
+
+    Groups stocks by sector, calculates:
+    - % of stocks in demand zones (demand_strength)
+    - % of stocks in supply zones (supply_strength)
+    - Average overlap count
+    - Top stocks per sector
+
+    Returns sorted list of sector dicts (strongest demand first).
+    """
+    sector_data = {}
+
+    for result in scan_results:
+        if not result:
+            continue
+        sector = result.get('sector', 'Unknown')
+        if sector not in sector_data:
+            sector_data[sector] = {
+                'sector': sector,
+                'total_stocks': 0,
+                'in_demand': 0,
+                'in_supply': 0,
+                'total_demand_overlap': 0,
+                'total_supply_overlap': 0,
+                'stocks': [],
+            }
+
+        sd = sector_data[sector]
+        sd['total_stocks'] += 1
+        if result['demand_overlap_count'] > 0:
+            sd['in_demand'] += 1
+        if result['supply_overlap_count'] > 0:
+            sd['in_supply'] += 1
+        sd['total_demand_overlap'] += result['demand_overlap_count']
+        sd['total_supply_overlap'] += result['supply_overlap_count']
+        sd['stocks'].append(result)
+
+    # Calculate percentages and sort
+    sectors = []
+    for sector, data in sector_data.items():
+        total = data['total_stocks']
+        if total == 0:
+            continue
+
+        data['demand_strength_pct'] = round((data['in_demand'] / total) * 100, 1)
+        data['supply_strength_pct'] = round((data['in_supply'] / total) * 100, 1)
+        data['avg_demand_overlap'] = round(data['total_demand_overlap'] / total, 2)
+        data['avg_supply_overlap'] = round(data['total_supply_overlap'] / total, 2)
+
+        # Pick top stocks by overlap count and strength
+        data['top_stocks'] = pick_top_stocks_per_sector(data['stocks'], top_n=3)
+
+        # Remove full stocks list from output (too large)
+        data.pop('stocks', None)
+        sectors.append(data)
+
+    # Sort by demand strength descending
+    sectors.sort(key=lambda s: s['demand_strength_pct'], reverse=True)
+    return sectors
+
+
+def pick_top_stocks_per_sector(stocks: list[dict], top_n: int = 3) -> list[dict]:
+    """
+    From a sector's stocks, pick the top N by:
+    1. Demand overlap count (primary sort)
+    2. Strongest zone score (secondary sort)
+    """
+    scored = []
+    for s in stocks:
+        composite_score = (
+            s.get('demand_overlap_count', 0) * 100 +
+            s.get('strongest_zone_score', 0)
+        )
+        scored.append((composite_score, s))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return [
+        {
+            'symbol': s['symbol'],
+            'current_price': s['current_price'],
+            'demand_overlap_count': s['demand_overlap_count'],
+            'supply_overlap_count': s['supply_overlap_count'],
+            'strongest_zone_score': s['strongest_zone_score'],
+            'quarterly_demand': s['quarterly_demand'],
+            'monthly_demand': s['monthly_demand'],
+            'weekly_demand': s['weekly_demand'],
+        }
+        for _, s in scored[:top_n]
+    ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Batch Scanner
+# ═════════════════════════════════════════════════════════════════════════════
+
+def batch_scan(symbols: list[str], fyers_svc=None, progress_callback=None) -> dict:
+    """
+    Scan multiple stocks and return full results with sector analysis.
+
+    Args:
+        symbols: List of NSE symbols (e.g. ['RELIANCE', 'TCS', ...])
+        fyers_svc: Optional FyersService instance
+        progress_callback: Optional callable(current, total, symbol) for progress updates
+
+    Returns:
+        {
+            'scan_results': [list of per-stock results],
+            'sector_strength': [list of sector analysis dicts],
+            'total_scanned': int,
+            'stocks_in_demand': int,
+            'stocks_in_supply': int,
+            'scan_time_seconds': float,
+        }
+    """
+    import time
+    start = time.time()
+
+    results = []
+    errors = []
+    total = len(symbols)
+
+    for idx, symbol in enumerate(symbols):
+        try:
+            if progress_callback:
+                progress_callback(idx + 1, total, symbol)
+
+            result = scan_stock_zones(symbol, fyers_svc)
+            if result:
+                results.append(result)
+        except Exception as e:
+            logger.error("Error scanning %s: %s", symbol, e)
+            errors.append({'symbol': symbol, 'error': str(e)})
+
+    # Analyze sectors
+    sector_strength = analyze_sector_strength(results)
+
+    elapsed = time.time() - start
+
+    return {
+        'scan_results': results,
+        'sector_strength': sector_strength,
+        'total_scanned': len(results),
+        'total_attempted': total,
+        'stocks_in_demand': sum(1 for r in results if r['demand_overlap_count'] > 0),
+        'stocks_in_supply': sum(1 for r in results if r['supply_overlap_count'] > 0),
+        'errors': errors,
+        'scan_time_seconds': round(elapsed, 2),
+    }

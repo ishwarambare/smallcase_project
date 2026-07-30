@@ -424,6 +424,42 @@ def get_stock_fundamentals(symbol: str) -> dict:
         if debt_to_equity is not None:
             debt_to_equity = float(debt_to_equity) / 100.0 if float(debt_to_equity) > 5.0 else float(debt_to_equity)
 
+        # CAGR calculations
+        cagr_1y = None
+        cagr_3y = None
+        cagr_5y = None
+        try:
+            hist_5y = ticker.history(period="5y")
+            if hist_5y is not None and not hist_5y.empty and "Close" in hist_5y.columns:
+                closes = hist_5y["Close"]
+                current = float(closes.iloc[-1])
+                
+                # 1Y CAGR
+                try:
+                    import pandas as pd
+                    past_1y = float(closes.loc[closes.index >= (closes.index[-1] - pd.DateOffset(years=1))].iloc[0])
+                    if past_1y > 0:
+                        cagr_1y = round((current / past_1y) ** 1 - 1, 4)
+                except Exception: pass
+                
+                # 3Y CAGR
+                try:
+                    import pandas as pd
+                    past_3y = float(closes.loc[closes.index >= (closes.index[-1] - pd.DateOffset(years=3))].iloc[0])
+                    if past_3y > 0:
+                        cagr_3y = round((current / past_3y) ** (1 / 3) - 1, 4)
+                except Exception: pass
+                
+                # 5Y CAGR
+                try:
+                    past_5y = float(closes.iloc[0])
+                    years = (closes.index[-1] - closes.index[0]).days / 365.25
+                    if past_5y > 0 and years >= 4:
+                        cagr_5y = round((current / past_5y) ** (1 / years) - 1, 4)
+                except Exception: pass
+        except Exception as ce:
+            print(f"[StockAnalysis] Error calculating CAGR for {symbol}: {ce}")
+
         return {
             "symbol": symbol,
             "name": s("longName") or s("shortName") or symbol,
@@ -468,6 +504,9 @@ def get_stock_fundamentals(symbol: str) -> dict:
             "assets_history": assets_history,
             "liabilities_history": liabilities_history,
             "intrinsic_value": intrinsic_value,
+            "cagr_1y": cagr_1y,
+            "cagr_3y": cagr_3y,
+            "cagr_5y": cagr_5y,
         }
     except Exception as e:
         print(f"[StockAnalysis] Fundamentals error for {symbol}: {e}")

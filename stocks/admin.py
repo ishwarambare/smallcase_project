@@ -1,5 +1,6 @@
 # stocks/admin.py
 
+from stocks.models import DemandSupplyZone
 from django.contrib import admin
 from django.shortcuts import render, redirect
 from django.urls import path
@@ -7,7 +8,7 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from import_export.admin import ImportExportModelAdmin, ExportActionMixin
 from import_export.formats.base_formats import CSV, XLSX, JSON, HTML, DEFAULT_FORMATS
-from .models import Stock, Basket, BasketItem, StockDocument, DocumentChunk
+from .models import *
 from .resources import (
     StockResource, BasketResource, BasketItemResource,
     ChatGroupResource, ChatGroupMemberResource, ChatMessageResource,
@@ -393,3 +394,15 @@ class TinyURLAdmin(ImportExportModelAdmin):
     def get_basket_name(self, obj):
         return obj.basket.name if obj.basket else 'N/A'
     get_basket_name.short_description = 'Basket'
+
+
+class AdminDemandSupplyZone(admin.ModelAdmin):
+    pass
+
+class AdminDemandSupplyScanResult(admin.ModelAdmin):
+    pass 
+
+
+admin.site.register(DemandSupplyZone, AdminDemandSupplyZone)
+admin.site.register(DemandSupplyScanResult, AdminDemandSupplyScanResult)
+    

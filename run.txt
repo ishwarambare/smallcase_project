@@ -1,0 +1,6 @@
+Command
+
+python manage.py runserver 1234
+celery -A smallcase_project worker --loglevel=info --pool=solo
+ngrok http 1234
+python .\test_fyer.py

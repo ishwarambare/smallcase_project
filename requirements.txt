@@ -41,6 +41,7 @@ openpyxl  # For Excel file (.xlsx) support
 
 # Technical analysis
 pandas-ta  # Technical analysis indicators (RSI, MACD, EMA, etc.)
+diskcache  # For caching API responses to disk
 
 # Fyers & DhanHQ Trading APIs
 fyers-apiv3  # Fyers API v3 SDK for webhooks & market data

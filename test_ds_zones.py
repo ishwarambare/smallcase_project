@@ -6,7 +6,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 import django
 django.setup()
 
-from stocks.demand_supply import scan_stock_zones
+from demand_supply.engine import scan_stock_zones
 
 print("=" * 60)
 print("Testing GTF Zone Detection on RELIANCE")

@@ -1,6 +1,5 @@
 # stocks/admin.py
 
-from stocks.models import DemandSupplyZone
 from django.contrib import admin
 from django.shortcuts import render, redirect
 from django.urls import path
@@ -396,13 +395,5 @@ class TinyURLAdmin(ImportExportModelAdmin):
     get_basket_name.short_description = 'Basket'
 
 
-class AdminDemandSupplyZone(admin.ModelAdmin):
-    pass
-
-class AdminDemandSupplyScanResult(admin.ModelAdmin):
-    pass 
-
-
-admin.site.register(DemandSupplyZone, AdminDemandSupplyZone)
-admin.site.register(DemandSupplyScanResult, AdminDemandSupplyScanResult)
-    
+# DemandSupplyZone and DemandSupplyScanResult admin classes have been moved
+# to the dedicated `demand_supply` app → demand_supply/admin.py

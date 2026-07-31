@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'import_export',  # Django Import-Export for admin data import/export
     'user',  # User authentication app
     'stocks',  # Stock basket management app
+    'demand_supply',  # GTF Demand-Supply Zone Scanner app
 
     # Celery task results stored in Django DB (no Redis required)
     'django_celery_results',
@@ -107,6 +108,7 @@ TEMPLATES = [
         'DIRS': [
             BASE_DIR / 'stocks' / 'templates',
             BASE_DIR / 'user' / 'templates',
+            BASE_DIR / 'demand_supply' / 'templates',
         ],
         'APP_DIRS': True,
         'OPTIONS': {

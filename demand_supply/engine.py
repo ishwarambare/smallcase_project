@@ -412,19 +412,45 @@ def score_zone_strength(zone: dict, avg_volume: float = 0) -> int:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def is_price_in_demand_zone(current_price: float, zone: dict, threshold_pct: float = ZONE_PROXIMITY_PCT) -> bool:
-    """Check if current price is within threshold_pct of a demand zone's proximal line (top)."""
-    proximal = zone['proximal']
-    distal = zone['distal']
-    # Price is "in zone" if it's between distal and proximal + threshold
+    """
+    Check if current price is at or near a demand zone.
+
+    Rules (GTF methodology):
+      - Demand zones are BELOW current price (support levels).
+      - A demand zone ABOVE current price is invalid — it has already been
+        consumed / price has moved through it and it is no longer a demand.
+      - Valid: zone.proximal_line <= current_price <= zone.proximal_line * (1 + threshold_pct%)
+    """
+    proximal = zone['proximal']   # top of demand zone
+    distal   = zone['distal']     # bottom of demand zone
+
+    # RULE: Demand zone must be below current price (proximal <= price)
+    if proximal > current_price:
+        return False
+
+    # Price should be within threshold% above the proximal line to count as "approaching"
     upper_bound = proximal * (1 + threshold_pct / 100)
     return distal <= current_price <= upper_bound
 
 
 def is_price_in_supply_zone(current_price: float, zone: dict, threshold_pct: float = ZONE_PROXIMITY_PCT) -> bool:
-    """Check if current price is within threshold_pct of a supply zone's proximal line (bottom)."""
-    proximal = zone['proximal']
-    distal = zone['distal']
-    # For supply: proximal is bottom, distal is top
+    """
+    Check if current price is at or near a supply zone.
+
+    Rules (GTF methodology):
+      - Supply zones are ABOVE current price (resistance levels).
+      - A supply zone BELOW current price is invalid — it has already been
+        broken through and is no longer acting as resistance.
+      - Valid: zone.proximal_line * (1 - threshold_pct%) <= current_price <= zone.distal_line
+    """
+    proximal = zone['proximal']   # bottom of supply zone
+    distal   = zone['distal']     # top of supply zone
+
+    # RULE: Supply zone must be above current price (proximal >= price)
+    if proximal < current_price:
+        return False
+
+    # Price should be within threshold% below the proximal line to count as "approaching"
     lower_bound = proximal * (1 - threshold_pct / 100)
     return lower_bound <= current_price <= distal
 

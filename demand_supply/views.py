@@ -160,15 +160,66 @@ def demand_supply_results(request):
     })
 
 
+def demand_supply_chart(request, symbol):
+    """
+    GET /api/demand-supply/chart/<sym>/
+    Returns the HTML div for the Plotly chart of the demand/supply zones.
+    """
+    from django.http import HttpResponse
+    try:
+        import yfinance as yf
+        from .visualize import visualize_zones
+        from datetime import datetime, timedelta
+        
+        # Fetch 1 year of data using yfinance
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+        
+        # Try finding the stock with .NS for NSE
+        yf_symbol = f"{symbol}.NS"
+        df = yf.download(yf_symbol, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), progress=False)
+        
+        if df.empty:
+            # Fallback for non-Indian stocks or exact symbols
+            df = yf.download(symbol, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), progress=False)
+            
+        if df.empty:
+            return HttpResponse("<h2>No historical data found for this symbol.</h2>")
+            
+        fig = visualize_zones(symbol, df)
+        chart_html = fig.to_html(full_html=True, include_plotlyjs='cdn')
+        return HttpResponse(chart_html)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HttpResponse(f"<h2>Error: {str(e)}</h2>")
+
+
+def demand_supply_tv_chart(request, symbol):
+    """
+    GET /demand-supply/tv-chart/<sym>/
+    Renders the HTML page hosting the TradingView Lightweight Chart
+    """
+    return render(request, 'demand_supply/chart.html', {'symbol': symbol})
+
 def demand_supply_stock_detail(request, symbol):
     """
     GET /api/demand-supply/stock/<SYMBOL>/
 
     Returns detailed zone information for a single stock.
+
+    GTF Position Rules applied:
+        - Demand zones must be BELOW current price  (proximal_line <= current_price)
+        - Supply zones must be ABOVE current price  (proximal_line >= current_price)
+
+    Query params:
+        strict_position = 'true' (default) | 'false' — disable to see all zones
     """
     from .models import DemandSupplyScanResult, DemandSupplyZone
 
     symbol = symbol.upper().strip()
+    strict = request.GET.get('strict_position', 'true').lower() == 'true'
 
     try:
         scan_result = DemandSupplyScanResult.objects.get(symbol=symbol)
@@ -178,26 +229,43 @@ def demand_supply_stock_detail(request, symbol):
             'error': f'No scan data for {symbol}. Run a scan first.',
         }, status=404)
 
+    current_price = float(scan_result.current_price) if scan_result.current_price else None
+
     # Get all zones for this stock
     zones = DemandSupplyZone.objects.filter(symbol=symbol)
     zones_list = []
     for z in zones:
+        proximal = float(z.proximal_line)
+        distal   = float(z.distal_line)
+
+        # ── GTF Position Rule ─────────────────────────────────────────────
+        # Demand zone must be BELOW current price (proximal <= price)
+        # Supply zone must be ABOVE current price (proximal >= price)
+        if strict and current_price is not None:
+            if z.zone_type == 'demand' and proximal > current_price:
+                continue  # demand above price → invalid, skip
+            if z.zone_type == 'supply' and proximal < current_price:
+                continue  # supply below price → invalid, skip
+        # ─────────────────────────────────────────────────────────────────
+
         zones_list.append({
-            'zone_type': z.zone_type,
-            'timeframe': z.timeframe,
-            'proximal': float(z.proximal_line),
-            'distal': float(z.distal_line),
-            'formed_date': z.formed_date.isoformat() if z.formed_date else None,
+            'zone_type':    z.zone_type,
+            'timeframe':    z.timeframe,
+            'proximal':     proximal,
+            'distal':       distal,
+            'formed_date':  z.formed_date.isoformat() if z.formed_date else None,
             'strength_score': z.strength_score,
-            'is_fresh': z.is_fresh,
+            'is_fresh':     z.is_fresh,
             'base_candles': z.base_candle_count,
-            'move_pct': float(z.move_pct),
+            'move_pct':     float(z.move_pct),
         })
 
     return JsonResponse({
         'success': True,
-        'stock': scan_result.to_dict(),
-        'zones': zones_list,
+        'stock':   scan_result.to_dict(),
+        'zones':   zones_list,
+        'current_price': current_price,
+        'position_rule_applied': strict,
     })
 
 

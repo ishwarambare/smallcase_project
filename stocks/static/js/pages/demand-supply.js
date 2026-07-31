@@ -332,14 +332,43 @@
         }
     }
 
+    const tfOrder = {
+        'quarterly': 1,
+        'monthly': 2,
+        'weekly': 3,
+        'daily': 4,
+        '125min': 5,
+        '75min': 6
+    };
+
+    function sortZones(zones) {
+        return zones.sort((a, b) => {
+            // Freshness: fresh on top
+            if (a.is_fresh && !b.is_fresh) return -1;
+            if (!a.is_fresh && b.is_fresh) return 1;
+            
+            // Timeframe order
+            const aTf = (a.timeframe || '').toLowerCase();
+            const bTf = (b.timeframe || '').toLowerCase();
+            const aRank = tfOrder[aTf] || 99;
+            const bRank = tfOrder[bTf] || 99;
+            
+            if (aRank !== bRank) {
+                return aRank - bRank;
+            }
+            
+            return 0;
+        });
+    }
+
     function renderStockModal(stock, zones) {
         modalTitle.textContent = `${stock.symbol} — Zone Analysis`;
 
-        const demandZones = zones.filter(z => z.zone_type === 'demand');
-        const supplyZones = zones.filter(z => z.zone_type === 'supply');
+        const demandZones = sortZones(zones.filter(z => z.zone_type === 'demand'));
+        const supplyZones = sortZones(zones.filter(z => z.zone_type === 'supply'));
 
         let html = `
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
                 <div class="ds-stat-card">
                     <div class="ds-stat-value blue">₹${formatPrice(stock.current_price)}</div>
                     <div class="ds-stat-label">Current Price</div>
@@ -353,24 +382,64 @@
                     <div class="ds-stat-label">Supply Overlaps</div>
                 </div>
             </div>
+            
+            <div style="text-align: right; margin-bottom: 1.5rem;">
+                <a href="${getApiUrl('/demand-supply/tv-chart/' + stock.symbol + '/')}" target="_blank" 
+                   style="display: inline-block; padding: 0.5rem 1rem; background: var(--primary-color, #3b82f6); color: white; border-radius: 4px; text-decoration: none; font-size: 0.85rem; font-weight: 500;">
+                   📈 View Interactive Chart
+                </a>
+            </div>
         `;
 
-        if (demandZones.length > 0) {
-            html += `<h3 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: #10b981;">📈 Demand Zones (${demandZones.length})</h3>`;
-            html += '<div class="ds-zone-list">';
-            demandZones.forEach(z => { html += zoneItem(z, 'demand'); });
-            html += '</div>';
-        }
-
-        if (supplyZones.length > 0) {
-            html += `<h3 style="font-size: 0.9rem; margin: 1.5rem 0 0.75rem; color: #ef4444;">📉 Supply Zones (${supplyZones.length})</h3>`;
-            html += '<div class="ds-zone-list">';
-            supplyZones.forEach(z => { html += zoneItem(z, 'supply'); });
-            html += '</div>';
-        }
+        const tableStyle = 'width: 100%; border-collapse: collapse; text-align: left; background: rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; margin-bottom: 0;';
+        const thStyle = 'padding: 0.5rem; background: rgba(255,255,255,0.05); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-color);';
 
         if (demandZones.length === 0 && supplyZones.length === 0) {
             html += '<p style="text-align:center; color: var(--text-secondary); padding: 2rem;">No zones detected for this stock.</p>';
+        } else {
+            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">';
+            
+            // Demand Column
+            html += '<div>';
+            html += `<h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #10b981;">📈 Demand Zones (${demandZones.length})</h3>`;
+            if (demandZones.length > 0) {
+                html += `<table style="${tableStyle}">
+                            <thead>
+                                <tr>
+                                    <th style="${thStyle}">TF</th>
+                                    <th style="${thStyle}">Range / Details</th>
+                                    <th style="${thStyle}">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                demandZones.forEach(z => { html += zoneTableRow(z, 'demand'); });
+                html += '</tbody></table>';
+            } else {
+                html += `<div style="text-align:center; color: var(--text-secondary); padding: 1.5rem; background: rgba(0,0,0,0.1); border-radius: 8px;">None</div>`;
+            }
+            html += '</div>';
+
+            // Supply Column
+            html += '<div>';
+            html += `<h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #ef4444;">📉 Supply Zones (${supplyZones.length})</h3>`;
+            if (supplyZones.length > 0) {
+                html += `<table style="${tableStyle}">
+                            <thead>
+                                <tr>
+                                    <th style="${thStyle}">TF</th>
+                                    <th style="${thStyle}">Range / Details</th>
+                                    <th style="${thStyle}">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                supplyZones.forEach(z => { html += zoneTableRow(z, 'supply'); });
+                html += '</tbody></table>';
+            } else {
+                html += `<div style="text-align:center; color: var(--text-secondary); padding: 1.5rem; background: rgba(0,0,0,0.1); border-radius: 8px;">None</div>`;
+            }
+            html += '</div>';
+
+            html += '</div>';
         }
 
         modalBody.innerHTML = html;
@@ -403,27 +472,28 @@
         `;
     }
 
-    function zoneItem(zone, type) {
-        const icon = type === 'demand' ? '🟢' : '🔴';
+    function zoneTableRow(zone, type) {
         const freshHtml = zone.is_fresh
-            ? '<span class="fresh-badge fresh">✨ Fresh</span>'
-            : '<span class="fresh-badge tested">⚡ Tested</span>';
+            ? '<span class="fresh-badge fresh" style="display: inline-block; padding: 2px 4px; font-size: 0.7rem;">✨ Fresh</span>'
+            : '<span class="fresh-badge tested" style="display: inline-block; padding: 2px 4px; font-size: 0.7rem;">⚡ Tested</span>';
 
+        const color = type === 'demand' ? '#10b981' : '#ef4444';
+        
         return `
-            <div class="ds-zone-item">
-                <div class="ds-zone-tf">${icon} ${zone.timeframe}</div>
-                <div class="ds-zone-range">
-                    <span class="proximal">₹${formatPrice(zone.proximal)}</span>
-                    <span class="distal"> → ₹${formatPrice(zone.distal)}</span>
-                    <span style="font-size: 0.72rem; color: var(--text-secondary); margin-left: 0.5rem;">
-                        ${zone.base_candles} candle base · ${zone.move_pct}% move
-                    </span>
-                </div>
-                <div class="ds-zone-meta">
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 0.5rem; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; color: ${color};">
+                    ${zone.timeframe}
+                </td>
+                <td style="padding: 0.5rem; font-size: 0.8rem;">
+                    <div style="color: var(--text-primary); font-weight: 500;">₹${formatPrice(zone.proximal)} → ₹${formatPrice(zone.distal)}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px;">
+                        ${zone.base_candles} candles · ${zone.move_pct}% move
+                    </div>
+                </td>
+                <td style="padding: 0.5rem;">
                     ${freshHtml}
-                    ${strengthBar(zone.strength_score)}
-                </div>
-            </div>
+                </td>
+            </tr>
         `;
     }
 

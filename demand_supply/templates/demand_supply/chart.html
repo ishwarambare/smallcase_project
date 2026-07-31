@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ symbol }} — Demand & Supply Chart</title>
+    <meta name="description" content="{{ symbol }} interactive demand supply zone chart with EMA and RSI indicators">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+
+    <style>
+        /* ── Reset & Base ───────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-deep:    #0a0d14;
+            --bg-panel:   #0f1117;
+            --bg-card:    #161b27;
+            --bg-input:   #1a2035;
+            --border:     #252b3b;
+            --border-lit: #2e3650;
+            --text-pri:   #e4e8f0;
+            --text-sec:   #8892a4;
+            --text-dim:   #4d566a;
+            --accent:     #3b82f6;
+            --accent-glow:rgba(59,130,246,0.25);
+            --demand:     #10b981;
+            --supply:     #ef4444;
+            --ema20:      #f59e0b;
+            --ema50:      #3b82f6;
+            --rsi-line:   #a78bfa;
+            --rsi-sig:    #f472b6;
+            --radius:     6px;
+            --panel-w:    240px;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg-deep);
+            color: var(--text-pri);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            overflow: hidden;
+        }
+
+        /* ── Layout ─────────────────────────────────────────────── */
+        .app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        .app-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            z-index: 30;
+        }
+
+        .header-symbol {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-pri);
+            letter-spacing: 0.5px;
+            margin-right: 4px;
+        }
+
+        .header-badge {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--text-sec);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+
+        /* Timeframe toolbar */
+        .tf-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .tf-btn {
+            padding: 5px 11px;
+            border: 1px solid var(--border-lit);
+            background: var(--bg-card);
+            color: var(--text-sec);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            font-family: 'Inter', sans-serif;
+        }
+        .tf-btn:hover  { border-color: var(--accent); color: var(--text-pri); }
+        .tf-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        /* Header action buttons */
+        .header-actions { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
+
+        .icon-btn {
+            display: flex; align-items: center; gap: 5px;
+            padding: 5px 10px;
+            border: 1px solid var(--border-lit);
+            background: var(--bg-card);
+            color: var(--text-sec);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            font-family: 'Inter', sans-serif;
+        }
+        .icon-btn:hover { border-color: var(--accent); color: var(--text-pri); }
+        .icon-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.1); }
+
+        /* ── Date Range Toolbar ────────────────────────────────────── */
+        .range-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 5px 16px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .range-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-right: 6px;
+        }
+        .range-btn {
+            padding: 3px 10px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-sec);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.12s ease;
+            font-family: 'Inter', sans-serif;
+            min-width: 34px;
+            text-align: center;
+        }
+        .range-btn:hover {
+            background: var(--bg-card);
+            color: var(--text-pri);
+            border-color: var(--border-lit);
+        }
+        .range-btn.active {
+            background: rgba(59,130,246,0.18);
+            color: var(--accent);
+            border-color: rgba(59,130,246,0.45);
+            font-weight: 600;
+        }
+        .range-separator {
+            width: 1px;
+            height: 14px;
+            background: var(--border);
+            margin: 0 6px;
+        }
+
+        /* ── Main Body ───────────────────────────────────────────── */
+        .app-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── Filter Sidebar ──────────────────────────────────────── */
+        .filter-panel {
+            width: var(--panel-w);
+            flex-shrink: 0;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-lit) transparent;
+        }
+
+        .filter-panel::-webkit-scrollbar { width: 4px; }
+        .filter-panel::-webkit-scrollbar-thumb { background: var(--border-lit); border-radius: 4px; }
+
+        .filter-section {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .filter-section-title {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+        }
+
+        /* Toggle row */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 0;
+            cursor: pointer;
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.8rem;
+            color: var(--text-sec);
+            cursor: pointer;
+        }
+        .toggle-label .dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-demand { background: var(--demand); }
+        .dot-supply { background: var(--supply); }
+        .dot-ema20  { background: var(--ema20); }
+        .dot-ema50  { background: var(--ema50); }
+        .dot-rsi    { background: var(--rsi-line); }
+        .dot-accent { background: var(--accent); }
+        .dot-white  { background: var(--text-sec); }
+
+        /* Custom toggle switch */
+        .toggle-switch {
+            position: relative;
+            width: 32px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-input);
+            border: 1px solid var(--border-lit);
+            border-radius: 99px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 12px; height: 12px;
+            left: 2px; top: 2px;
+            background: var(--text-dim);
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+        input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+        input:checked + .toggle-slider::before {
+            transform: translateX(14px);
+            background: #fff;
+        }
+        /* Demand color */
+        .toggle-switch.demand input:checked + .toggle-slider { background: var(--demand); border-color: var(--demand); }
+        /* Supply color */
+        .toggle-switch.supply input:checked + .toggle-slider { background: var(--supply); border-color: var(--supply); }
+        /* EMA colors */
+        .toggle-switch.ema20 input:checked + .toggle-slider { background: var(--ema20); border-color: var(--ema20); }
+        .toggle-switch.ema50 input:checked + .toggle-slider { background: var(--ema50); border-color: var(--ema50); }
+        .toggle-switch.rsi input:checked + .toggle-slider { background: var(--rsi-line); border-color: var(--rsi-line); }
+
+        /* Overlap slider */
+        .overlap-row {
+            margin-top: 4px;
+        }
+        .overlap-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .overlap-label { font-size: 0.8rem; color: var(--text-sec); }
+        .overlap-val {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-pri);
+            background: var(--bg-card);
+            border: 1px solid var(--border-lit);
+            border-radius: 4px;
+            padding: 1px 7px;
+            min-width: 26px;
+            text-align: center;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--bg-input);
+            border-radius: 99px;
+            outline: none;
+            border: 1px solid var(--border-lit);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 0 6px var(--accent-glow);
+        }
+
+        /* Per-TF grid */
+        .tf-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            margin-top: 2px;
+        }
+        .tf-toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+        .tf-toggle-item label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-sec);
+            cursor: pointer;
+            letter-spacing: 0.3px;
+        }
+        .tf-toggle-item .toggle-switch { width: 26px; height: 15px; }
+        .tf-toggle-item .toggle-switch .toggle-slider::before { width: 9px; height: 9px; }
+        .tf-toggle-item input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+        .tf-toggle-item input:checked + .toggle-slider::before { transform: translateX(11px); }
+
+        /* ── Chart Area ──────────────────────────────────────────── */
+        .chart-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Main chart container */
+        #chart-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #custom-canvas-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.9rem;
+            color: var(--text-sec);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 20;
+        }
+        #loading::before {
+            content: '';
+            width: 16px; height: 16px;
+            border: 2px solid var(--border-lit);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* RSI pane */
+        .rsi-divider {
+            height: 3px;
+            background: var(--border);
+            flex-shrink: 0;
+            cursor: row-resize;
+            position: relative;
+        }
+        .rsi-divider::after {
+            content: 'RSI 14';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.62rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            background: var(--bg-panel);
+            padding: 0 6px;
+        }
+
+        #rsi-container {
+            height: 150px;
+            flex-shrink: 0;
+            background: var(--bg-panel);
+            position: relative;
+        }
+
+        /* ── Nearest Zone Info Bar ───────────────────────────────── */
+        .zone-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 14px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            font-size: 0.75rem;
+        }
+
+        .zone-info-label { color: var(--text-dim); }
+
+        .zone-info-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.72rem;
+        }
+        .zone-info-chip.demand { background: rgba(16,185,129,0.15); color: var(--demand); border: 1px solid rgba(16,185,129,0.3); }
+        .zone-info-chip.supply { background: rgba(239,68,68,0.15);  color: var(--supply); border: 1px solid rgba(239,68,68,0.3); }
+
+        /* ── Scrollbar hide ──────────────────────────────────────── */
+        .filter-panel::-webkit-scrollbar { width: 3px; }
+
+        /* ── Responsive note ─────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .filter-panel { width: 190px; }
+            :root { --panel-w: 190px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- ── Header ───────────────────────────────────────────────── -->
+    <header class="app-header">
+        <h1 class="header-symbol">{{ symbol }}</h1>
+        <span class="header-badge">Demand & Supply Zones</span>
+
+        <!-- Timeframe toolbar -->
+        <div class="tf-toolbar">
+            <button class="tf-btn" data-tf="quarterly">1Q</button>
+            <button class="tf-btn" data-tf="monthly">1M</button>
+            <button class="tf-btn" data-tf="weekly">1W</button>
+            <button class="tf-btn active" data-tf="daily">1D</button>
+            <button class="tf-btn" data-tf="125min">125m</button>
+            <button class="tf-btn" data-tf="75min">75m</button>
+        </div>
+
+        <div class="header-actions">
+            <button class="icon-btn" id="btn-auto-fit" title="Fit chart to visible data">
+                ⬜ Auto-fit
+            </button>
+        </div>
+    </header>
+
+    <!-- ── Date Range Toolbar ──────────────────────────────────── -->
+    <div class="range-toolbar" id="range-toolbar">
+        <span class="range-label">Range</span>
+        <button class="range-btn" data-range="1D">1D</button>
+        <button class="range-btn" data-range="1M">1M</button>
+        <button class="range-btn" data-range="3M">3M</button>
+        <button class="range-btn" data-range="6M">6M</button>
+        <button class="range-btn active" data-range="1Y">1Y</button>
+        <div class="range-separator"></div>
+        <button class="range-btn" data-range="3Y">3Y</button>
+        <button class="range-btn" data-range="5Y">5Y</button>
+        <button class="range-btn" data-range="ALL">All</button>
+    </div>
+
+    <!-- ── Body ─────────────────────────────────────────────────── -->
+    <div class="app-body">
+
+        <!-- ── Filter Sidebar ───────────────────────────────────── -->
+        <aside class="filter-panel">
+
+            <!-- Zone Filters -->
+            <div class="filter-section">
+                <div class="filter-section-title">Zone Filters</div>
+
+                <!-- Fresh Only -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-accent"></span>
+                        Fresh Zones Only
+                    </span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="filter-fresh-only">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <!-- Demand toggle -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-demand"></span>
+                        Show Demand
+                    </span>
+                    <label class="toggle-switch demand">
+                        <input type="checkbox" id="filter-show-demand" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <!-- Supply toggle -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-supply"></span>
+                        Show Supply
+                    </span>
+                    <label class="toggle-switch supply">
+                        <input type="checkbox" id="filter-show-supply" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <!-- Nearest zone highlight -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-white"></span>
+                        Highlight Nearest
+                    </span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="filter-nearest" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <!-- All-TF overlay -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-accent"></span>
+                        All-TF Overlay
+                    </span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="filter-all-tf">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <!-- Overlap Filter -->
+            <div class="filter-section">
+                <div class="filter-section-title">Overlap Filter</div>
+                <div class="overlap-row">
+                    <div class="overlap-header">
+                        <span class="overlap-label">Min TF overlap count</span>
+                        <span class="overlap-val" id="filter-overlap-val">0</span>
+                    </div>
+                    <input type="range" id="filter-overlap" min="0" max="6" value="0" step="1">
+                    <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                        <span style="font-size:0.65rem;color:var(--text-dim);">0 (All)</span>
+                        <span style="font-size:0.65rem;color:var(--text-dim);">6 (Max)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Per-TF Zone Visibility -->
+            <div class="filter-section">
+                <div class="filter-section-title">Zones by Timeframe</div>
+                <div class="tf-grid">
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-quarterly">1Q</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-quarterly" class="tf-zone-toggle" data-tf="quarterly" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-monthly">1M</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-monthly" class="tf-zone-toggle" data-tf="monthly" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-weekly">1W</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-weekly" class="tf-zone-toggle" data-tf="weekly" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-daily">1D</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-daily" class="tf-zone-toggle" data-tf="daily" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-125min">125m</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-125min" class="tf-zone-toggle" data-tf="125min" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="tf-toggle-item">
+                        <label for="tf-zone-75min">75m</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="tf-zone-75min" class="tf-zone-toggle" data-tf="75min" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Indicators -->
+            <div class="filter-section">
+                <div class="filter-section-title">Indicators</div>
+
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-ema20"></span>
+                        EMA 20
+                    </span>
+                    <label class="toggle-switch ema20">
+                        <input type="checkbox" id="filter-ema20" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-ema50"></span>
+                        EMA 50
+                    </span>
+                    <label class="toggle-switch ema50">
+                        <input type="checkbox" id="filter-ema50" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span class="dot dot-rsi"></span>
+                        RSI 14 + Signal
+                    </span>
+                    <label class="toggle-switch rsi">
+                        <input type="checkbox" id="filter-rsi" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+
+                <!-- Crossover toggle -->
+                <label class="toggle-row">
+                    <span class="toggle-label">
+                        <span style="display:inline-flex;gap:2px;vertical-align:middle;">
+                            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;"></span>
+                            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ef4444;"></span>
+                        </span>
+                        Cross Labels
+                    </span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="filter-crossovers" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <!-- Legend -->
+            <div class="filter-section" style="border-bottom:none;">
+                <div class="filter-section-title">Legend</div>
+                <div style="display:flex;flex-direction:column;gap:5px;">
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:var(--demand);border-radius:2px;"></div>
+                        Demand (Fresh)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:rgba(16,185,129,0.4);border-radius:2px;"></div>
+                        Demand (Tested)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:var(--supply);border-radius:2px;"></div>
+                        Supply (Fresh)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:rgba(239,68,68,0.4);border-radius:2px;"></div>
+                        Supply (Tested)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:var(--ema20);border-radius:2px;"></div>
+                        EMA 20 (Amber)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:3px;background:var(--ema50);border-radius:2px;"></div>
+                        EMA 50 (Blue)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:2px;background:var(--rsi-line);border-radius:2px;"></div>
+                        RSI 14 (Purple)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:2px;background:var(--rsi-sig);border-radius:2px;border-top:1px dashed var(--rsi-sig);"></div>
+                        RSI Signal (Pink)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-sec);">
+                        <div style="width:22px;height:9px;background:rgba(59,130,246,0.2);border:1px solid var(--accent);border-radius:2px;"></div>
+                        D1 / D2 (Nearest)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#f59e0b;">
+                        <div style="width:22px;height:3px;background:#f59e0b;border-radius:2px;border-top:2px dashed #f59e0b;opacity:0.6;"></div>
+                        ☀ Golden Cross
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#ef4444;">
+                        <div style="width:22px;height:3px;background:#ef4444;border-radius:2px;border-top:2px dashed #ef4444;opacity:0.6;"></div>
+                        ✝ Death Cross
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- ── Chart Area ────────────────────────────────────────── -->
+        <div class="chart-area">
+            <!-- Main Chart -->
+            <div id="chart-container">
+                <div id="loading">Loading chart…</div>
+                <canvas id="custom-canvas-overlay"></canvas>
+            </div>
+
+            <!-- RSI Divider -->
+            <div class="rsi-divider" id="rsi-divider"></div>
+
+            <!-- RSI Pane -->
+            <div id="rsi-container"></div>
+        </div>
+
+    </div><!-- app-body -->
+</div><!-- app-shell -->
+
+<script>
+    const SYMBOL = "{{ symbol }}";
+</script>
+<!-- Chart Scripts -->
+<script src="/static/js/chart/api.js"></script>
+<script src="/static/js/chart/draw_rectangles.js"></script>
+<script src="/static/js/chart/chart.js"></script>
+</body>
+</html>

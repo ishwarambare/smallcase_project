@@ -53,69 +53,7 @@ ZONE_PROXIMITY_PCT = 5.0
 # Lookback for swing detection
 SWING_LOOKBACK = 2
 
-# Sector mapping for popular Indian stocks (yfinance fallback)
-SECTOR_MAP = {
-    # IT
-    'TCS': 'IT', 'INFY': 'IT', 'WIPRO': 'IT', 'HCLTECH': 'IT',
-    'TECHM': 'IT', 'LTIM': 'IT', 'PERSISTENT': 'IT', 'COFORGE': 'IT',
-    'MPHASIS': 'IT', 'LTTS': 'IT',
-    # Banking
-    'HDFCBANK': 'Banking', 'ICICIBANK': 'Banking', 'SBIN': 'Banking',
-    'KOTAKBANK': 'Banking', 'AXISBANK': 'Banking', 'INDUSINDBK': 'Banking',
-    'BANKBARODA': 'Banking', 'PNB': 'Banking', 'IDFCFIRSTB': 'Banking',
-    'FEDERALBNK': 'Banking', 'BANDHANBNK': 'Banking',
-    # NBFC / Financial Services
-    'BAJFINANCE': 'Financial Services', 'BAJAJFINSV': 'Financial Services',
-    'CHOLAFIN': 'Financial Services', 'MUTHOOTFIN': 'Financial Services',
-    'M&MFIN': 'Financial Services', 'SHRIRAMFIN': 'Financial Services',
-    'CDSL': 'Financial Services', 'CAMS': 'Financial Services',
-    # Pharma
-    'SUNPHARMA': 'Pharma', 'DRREDDY': 'Pharma', 'CIPLA': 'Pharma',
-    'DIVISLAB': 'Pharma', 'AUROPHARMA': 'Pharma', 'LUPIN': 'Pharma',
-    'BIOCON': 'Pharma', 'TORNTPHARM': 'Pharma', 'ALKEM': 'Pharma',
-    # Auto
-    'MARUTI': 'Auto', 'TATAMOTORS': 'Auto', 'M&M': 'Auto',
-    'BAJAJ-AUTO': 'Auto', 'HEROMOTOCO': 'Auto', 'EICHERMOT': 'Auto',
-    'ASHOKLEY': 'Auto', 'TVSMOTOR': 'Auto',
-    # Energy / Oil & Gas
-    'RELIANCE': 'Energy', 'ONGC': 'Energy', 'IOC': 'Energy',
-    'BPCL': 'Energy', 'GAIL': 'Energy', 'NTPC': 'Energy',
-    'POWERGRID': 'Energy', 'TATAPOWER': 'Energy', 'ADANIGREEN': 'Energy',
-    # Metal / Mining
-    'TATASTEEL': 'Metals', 'HINDALCO': 'Metals', 'JSWSTEEL': 'Metals',
-    'VEDL': 'Metals', 'COALINDIA': 'Metals', 'NMDC': 'Metals',
-    # Infra / Capital Goods
-    'LT': 'Infrastructure', 'ADANIENT': 'Infrastructure',
-    'ADANIPORTS': 'Infrastructure', 'SIEMENS': 'Infrastructure',
-    'ABB': 'Infrastructure', 'BEL': 'Infrastructure',
-    'HAL': 'Infrastructure', 'CGPOWER': 'Infrastructure',
-    # FMCG
-    'HINDUNILVR': 'FMCG', 'ITC': 'FMCG', 'NESTLEIND': 'FMCG',
-    'BRITANNIA': 'FMCG', 'DABUR': 'FMCG', 'MARICO': 'FMCG',
-    'GODREJCP': 'FMCG', 'COLPAL': 'FMCG', 'TATACONSUM': 'FMCG',
-    # Cement
-    'ULTRACEMCO': 'Cement', 'SHREECEM': 'Cement', 'AMBUJACEM': 'Cement',
-    'ACC': 'Cement', 'RAMCOCEM': 'Cement',
-    # Real Estate
-    'DLF': 'Real Estate', 'GODREJPROP': 'Real Estate',
-    'OBEROIRLTY': 'Real Estate', 'PRESTIGE': 'Real Estate',
-    # Telecom
-    'BHARTIARTL': 'Telecom', 'IDEA': 'Telecom',
-    # Insurance
-    'HDFCLIFE': 'Insurance', 'SBILIFE': 'Insurance',
-    'ICICIPRULI': 'Insurance', 'LICI': 'Insurance',
-    # Consumer Durables
-    'TITAN': 'Consumer', 'ASIANPAINT': 'Consumer',
-    'PIDILITIND': 'Consumer', 'HAVELLS': 'Consumer',
-    'VOLTAS': 'Consumer', 'WHIRLPOOL': 'Consumer',
-    # Defence / Shipbuilding
-    'MAZDOCK': 'Defence', 'GRSE': 'Defence', 'COCHINSHIP': 'Defence',
-    # Hotels
-    'INDHOTEL': 'Hotels', 'CHALET': 'Hotels',
-    # Chemicals
-    'PIIND': 'Chemicals', 'ATUL': 'Chemicals', 'DEEPAKNTR': 'Chemicals',
-    'CHAMBLFERT': 'Chemicals',
-}
+from .nifty500 import get_sector_for_symbol
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -652,7 +590,7 @@ def scan_stock_zones(symbol: str, fyers_svc=None) -> dict:
     strongest_score = max(all_zone_scores) if all_zone_scores else 0
 
     # Get stock info
-    sector = SECTOR_MAP.get(clean_symbol, '')
+    sector = get_sector_for_symbol(clean_symbol) or ''
     name = clean_symbol
 
     # Try to get name and sector from yfinance if not in map

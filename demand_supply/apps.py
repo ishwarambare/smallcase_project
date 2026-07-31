@@ -1,5 +1,6 @@
 # demand_supply/apps.py
 
+# pyrefly: ignore [missing-import]
 from django.apps import AppConfig
 
 

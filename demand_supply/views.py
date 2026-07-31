@@ -12,7 +12,9 @@ Endpoints:
     GET  /api/demand-supply/status/       → Scan task status / progress
 """
 
+# pyrefly: ignore [missing-import]
 from django.shortcuts import render
+# pyrefly: ignore [missing-import]
 from django.http import JsonResponse
 
 

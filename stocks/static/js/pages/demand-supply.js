@@ -142,7 +142,7 @@
         const params = new URLSearchParams();
         params.set('zone_type', currentFilters.zone_type);
         params.set('sort_by', currentFilters.sort_by);
-        params.set('limit', 500);           // fetch all, client will filter/search
+        params.set('limit', 600);           // fetch all, client will filter/search
         if (currentFilters.fresh_only) params.set('fresh_only', 'true');
 
         try {

@@ -14,7 +14,9 @@ Usage:
 """
 
 import logging
+# pyrefly: ignore [missing-import]
 from celery import shared_task
+# pyrefly: ignore [missing-import]
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)

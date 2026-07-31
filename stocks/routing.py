@@ -3,6 +3,7 @@
 WebSocket URL routing for Django Channels.
 """
 
+# pyrefly: ignore [missing-import]
 from django.urls import re_path
 from . import consumers
 

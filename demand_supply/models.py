@@ -1,5 +1,6 @@
 # demand_supply/models.py
 
+# pyrefly: ignore [missing-import]
 from django.db import models
 
 

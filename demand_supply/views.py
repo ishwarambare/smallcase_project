@@ -16,6 +16,7 @@ Endpoints:
 from django.shortcuts import render
 # pyrefly: ignore [missing-import]
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 
 
 def demand_supply_dashboard(request):
@@ -27,6 +28,7 @@ def demand_supply_dashboard(request):
     return render(request, 'demand_supply/demand_supply.j2')
 
 
+@csrf_exempt
 def demand_supply_scan(request):
     """
     POST /api/demand-supply/scan/
@@ -367,9 +369,251 @@ def demand_supply_scan_status(request):
 
     if result.status == 'PROGRESS':
         response['progress'] = result.info
-    elif result.status == 'SUCCESS':
-        response['result'] = result.result
-    elif result.status == 'FAILURE':
-        response['error'] = str(result.result)
-
     return JsonResponse(response)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Dhan API Views (Token Status, Order Calculation, Super Order Placement & Alerts)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def dhan_status(request):
+    """
+    GET /api/dhan/status/
+
+    Check validity of access token and account setup.
+    Returns fund limits, available balance, client ID.
+    """
+    from stocks.dhan_service import dhan_service
+    status_info = dhan_service.check_account_status()
+    return JsonResponse(status_info)
+
+
+@csrf_exempt
+def dhan_calculate_order(request):
+    """
+    POST /api/dhan/calculate-order/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.demand_supply import calculate_dhan_super_order
+
+    res = calculate_dhan_super_order(
+        entry_price=data.get('entry_price', 0),
+        stop_loss_price=data.get('stop_loss_price', 0),
+        capital=data.get('capital', 100000),
+        risk_pct=data.get('risk_pct', 1.0),
+        reward_ratio=data.get('reward_ratio', 2.0),
+        side=data.get('side', 'BUY')
+    )
+    return JsonResponse(res)
+
+
+@csrf_exempt
+def dhan_place_super_order(request):
+    """
+    POST /api/dhan/place-super-order/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.demand_supply import execute_dhan_zone_super_order
+
+    res = execute_dhan_zone_super_order(
+        symbol=data.get('symbol', ''),
+        entry_price=data.get('entry_price', 0),
+        stop_loss_price=data.get('stop_loss_price', 0),
+        capital=data.get('capital', 100000),
+        risk_pct=data.get('risk_pct', 1.0),
+        reward_ratio=data.get('reward_ratio', 2.0),
+        side=data.get('side', 'BUY'),
+        order_type=data.get('order_type', 'LIMIT'),
+        product_type=data.get('product_type', 'INTRA')
+    )
+    return JsonResponse(res)
+
+
+@csrf_exempt
+def dhan_place_alert(request):
+    """
+    POST /api/dhan/place-alert/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.dhan_service import dhan_service
+
+    symbol = data.get('symbol', '').upper()
+    sec_info = dhan_service.get_security_id(symbol)
+    if not sec_info:
+        return JsonResponse({'success': False, 'error': f'Security ID not found for {symbol}'}, status=400)
+
+    res = dhan_service.place_forever_alert(
+        security_id=sec_info['security_id'],
+        transaction_type=data.get('side', 'BUY'),
+        quantity=int(data.get('quantity', 1)),
+        price=float(data.get('price', 0)),
+        trigger_price=float(data.get('trigger_price', 0)),
+        exchange_segment=sec_info['exchange'],
+        symbol=symbol
+    )
+    return JsonResponse({
+        'success': res.get('status') == 'success',
+        'dhan_response': res,
+    })
+
+
+def dhan_orders(request):
+    """
+    GET /api/dhan/orders/
+
+    Fetch order list and active forever alerts.
+    """
+    from stocks.dhan_service import dhan_service
+    orders = dhan_service.get_order_list()
+    forevers = dhan_service.get_forever_orders()
+    positions = dhan_service.get_positions()
+    holdings = dhan_service.get_holdings()
+
+    return JsonResponse({
+        'success': True,
+        'orders': orders,
+        'forever_alerts': forevers,
+        'positions': positions,
+        'holdings': holdings,
+    })
+
+
+@csrf_exempt
+def dhan_cancel_order(request):
+    """
+    POST /api/dhan/cancel-order/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.dhan_service import dhan_service
+    order_id = data.get('order_id', '')
+
+    if data.get('is_forever'):
+        res = dhan_service.cancel_forever_order(order_id)
+    elif data.get('is_super'):
+        res = dhan_service.cancel_super_order(order_id)
+    else:
+        res = dhan_service.cancel_order(order_id)
+
+    return JsonResponse({
+        'success': res.get('status') == 'success',
+        'dhan_response': res,
+    })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fyers Broker API Endpoints
+# ═════════════════════════════════════════════════════════════════════════════
+
+def fyers_status(request):
+    """
+    GET /api/fyers/status/
+    """
+    from stocks.fyers_service import fyers_service
+    active = fyers_service.check_and_refresh()
+    if not active:
+        return JsonResponse({'active': False})
+
+    profile = fyers_service.get_profile()
+    funds = fyers_service.get_funds()
+
+    available_balance = 0.0
+    if isinstance(funds, list):
+        for f in funds:
+            if f.get('title') == 'Available Balance':
+                available_balance = f.get('equityAmount', 0.0)
+
+    return JsonResponse({
+        'active': True,
+        'client_id': profile.get('fy_id') if profile else 'Unknown',
+        'available_balance': available_balance,
+        'profile': profile
+    })
+
+@csrf_exempt
+def fyers_place_super_order(request):
+    """
+    POST /api/fyers/place-super-order/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.demand_supply import execute_fyers_zone_super_order
+
+    res = execute_fyers_zone_super_order(
+        symbol=data.get('symbol', ''),
+        entry_price=data.get('entry_price', 0),
+        stop_loss_price=data.get('stop_loss_price', 0),
+        capital=data.get('capital', 100000),
+        risk_pct=data.get('risk_pct', 1.0),
+        reward_ratio=data.get('reward_ratio', 2.0),
+        side=data.get('side', 'BUY'),
+        order_type=1 if data.get('order_type', 'LIMIT') == 'LIMIT' else 2,
+        product_type=data.get('product_type', 'CNC')
+    )
+    return JsonResponse(res)
+
+@csrf_exempt
+def fyers_place_alert(request):
+    """
+    POST /api/fyers/place-alert/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    from stocks.fyers_service import fyers_service
+
+    symbol = data.get('symbol', '').upper()
+    res = fyers_service.place_alert(
+        symbol=symbol,
+        trigger_price=float(data.get('trigger_price', 0)),
+        side=data.get('side', 'BUY'),
+        quantity=int(data.get('quantity', 1))
+    )
+    return JsonResponse({
+        'success': res.get('s') == 'ok',
+        'fyers_response': res,
+    })

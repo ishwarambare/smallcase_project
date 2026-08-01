@@ -24,12 +24,14 @@ urlpatterns = [
     
     # Django Allauth URLs (outside i18n_patterns for consistency)
     path('accounts/', include('allauth.urls')),
+
+    # GTF Demand-Supply & Dhan API URLs (outside i18n_patterns to prevent 302 redirects on API POST requests)
+    path('', include('demand_supply.urls')),
 ]
 
 urlpatterns += i18n_patterns(
     path('admin/', admin.site.urls),
     path('', include('user.urls')),  # User authentication URLs
     path('', include('stocks.urls')),  # Stock basket management URLs
-    path('', include('demand_supply.urls')),  # GTF Demand-Supply Zone Scanner URLs
     prefix_default_language=True,  # Add language prefix to URLs
 )

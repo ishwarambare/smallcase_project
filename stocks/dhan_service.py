@@ -318,6 +318,282 @@ class DhanService:
             )
         return []
 
+    def check_account_status(self) -> dict:
+        """
+        Verify validity of access token and fetch account status/fund limits.
+        """
+        if not self.is_active:
+            return {
+                'active': False,
+                'error': 'DHAN_CLIENT_ID or DHAN_ACCESS_TOKEN not configured in .env',
+                'client_id': self.client_id or 'Not Configured'
+            }
+        funds = self.get_fund_limits()
+        if funds is None:
+            return {
+                'active': False,
+                'error': 'Failed to validate access token with DhanHQ API',
+                'client_id': self.client_id
+            }
+        
+        holdings = self.get_holdings()
+        positions = self.get_positions()
+        return {
+            'active': True,
+            'client_id': self.client_id,
+            'funds': funds,
+            'available_balance': funds.get('availabelBalance', 0.0),
+            'sod_limit': funds.get('sodLimit', 0.0),
+            'withdrawable_balance': funds.get('withdrawableBalance', 0.0),
+            'holdings_count': len(holdings),
+            'positions_count': len(positions),
+        }
+
+    def get_security_id(self, symbol: str) -> Optional[dict]:
+        """
+        Lookup DhanHQ security_id and exchange segment for a symbol.
+        Checks static map, database, and official Dhan scrip master CSV.
+        """
+        sym = symbol.upper().strip()
+        if sym in DHAN_SECURITY_MAP:
+            return DHAN_SECURITY_MAP[sym]
+
+        if hasattr(self, '_scrip_cache') and sym in self._scrip_cache:
+            return self._scrip_cache[sym]
+
+        if not hasattr(self, '_scrip_cache'):
+            self._scrip_cache = {}
+        
+        # Try database Stock model if available
+        try:
+            from stocks.models import Stock
+            stk = Stock.objects.filter(symbol=sym).first()
+            if stk and hasattr(stk, 'dhan_security_id') and stk.dhan_security_id:
+                res = {'security_id': str(stk.dhan_security_id), 'exchange': 'NSE_EQ'}
+                self._scrip_cache[sym] = res
+                return res
+        except Exception:
+            pass
+
+        # Try searching official Dhan Scrip Master CSV
+        try:
+            import os, time, pandas as pd
+            cache_dir = os.path.join(settings.BASE_DIR, '.cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            csv_path = os.path.join(cache_dir, 'dhan_scrip_master.csv')
+
+            # Download or load scrip master CSV
+            if not os.path.exists(csv_path) or (time.time() - os.path.getmtime(csv_path)) > (7 * 86400):
+                df = pd.read_csv('https://images.dhan.co/api-data/api-scrip-master.csv', low_memory=False)
+                df.to_csv(csv_path, index=False)
+            else:
+                df = pd.read_csv(csv_path, low_memory=False)
+
+            # Filter matching symbol in NSE_EQ
+            matches = df[(df['SEM_TRADING_SYMBOL'].astype(str).str.upper() == sym) | (df['SEM_CUSTOM_SYMBOL'].astype(str).str.upper() == sym)]
+            if not matches.empty:
+                # Prefer NSE_EQ / NSE
+                nse_matches = matches[matches['SEM_EXM_EXCH_ID'] == 'NSE']
+                row = nse_matches.iloc[0] if not nse_matches.empty else matches.iloc[0]
+                sec_id = str(row['SEM_SMST_SECURITY_ID'])
+                exch = 'NSE_EQ' if row.get('SEM_EXM_EXCH_ID') == 'NSE' else 'BSE_EQ'
+                res = {'security_id': sec_id, 'exchange': exch}
+                self._scrip_cache[sym] = res
+                return res
+        except Exception as exc:
+            logger.warning("Scrip master lookup error for %s: %s", sym, exc)
+
+        return None
+
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Order Execution (Super Order / Bracket Order / Regular Order / Alert)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def place_super_order(
+        self,
+        security_id: str,
+        transaction_type: str,
+        quantity: int,
+        price: float,
+        target_price: float,
+        stop_loss_price: float,
+        exchange_segment: str = 'NSE_EQ',
+        order_type: str = 'LIMIT',
+        product_type: str = 'INTRA',
+        trailing_jump: float = 0.0,
+        tag: str = 'ZONE_SUPER_ORDER',
+    ) -> dict:
+        """
+        Place a Super Order (Bracket Order with SL and Target legs) via DhanHQ API.
+        """
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            tx_type = self._client.BUY if transaction_type.upper() == 'BUY' else self._client.SELL
+            ord_type = self._client.LIMIT if order_type.upper() == 'LIMIT' else self._client.MARKET
+            prod_type = self._client.INTRA if product_type.upper() in ('INTRA', 'INTRADAY', 'BO') else self._client.CNC
+            
+            result = self._client.place_super_order(
+                security_id=str(security_id),
+                exchange_segment=exchange_segment,
+                transaction_type=tx_type,
+                quantity=int(quantity),
+                order_type=ord_type,
+                product_type=prod_type,
+                price=float(price),
+                targetPrice=float(target_price),
+                stopLossPrice=float(stop_loss_price),
+                trailingJump=float(trailing_jump),
+                tag=tag
+            )
+            logger.info("DhanHQ place_super_order response: %s", result)
+            return result or {'status': 'failure', 'remarks': 'Empty response from Dhan'}
+        except Exception as exc:
+            logger.exception("DhanHQ place_super_order error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
+    def place_order(
+        self,
+        security_id: str,
+        transaction_type: str,
+        quantity: int,
+        order_type: str = 'LIMIT',
+        product_type: str = 'CNC',
+        price: float = 0.0,
+        trigger_price: float = 0.0,
+        exchange_segment: str = 'NSE_EQ',
+        bo_profit_value: float = 0.0,
+        bo_stop_loss_value: float = 0.0,
+    ) -> dict:
+        """
+        Place standard Equity/Intraday order via DhanHQ API.
+        """
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            tx_type = self._client.BUY if transaction_type.upper() == 'BUY' else self._client.SELL
+            ord_type = getattr(self._client, order_type.upper(), self._client.LIMIT)
+            prod_type = getattr(self._client, product_type.upper(), self._client.CNC)
+
+            kwargs = {
+                'security_id': str(security_id),
+                'exchange_segment': exchange_segment,
+                'transaction_type': tx_type,
+                'quantity': int(quantity),
+                'order_type': ord_type,
+                'product_type': prod_type,
+                'price': float(price),
+                'trigger_price': float(trigger_price),
+            }
+            if bo_profit_value > 0:
+                kwargs['bo_profit_value'] = float(bo_profit_value)
+            if bo_stop_loss_value > 0:
+                kwargs['bo_stop_loss_Value'] = float(bo_stop_loss_value)
+
+            result = self._client.place_order(**kwargs)
+            logger.info("DhanHQ place_order response: %s", result)
+            return result or {'status': 'failure', 'remarks': 'Empty response'}
+        except Exception as exc:
+            logger.exception("DhanHQ place_order error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
+    def place_forever_alert(
+        self,
+        security_id: str,
+        transaction_type: str,
+        quantity: int,
+        price: float,
+        trigger_price: float,
+        exchange_segment: str = 'NSE_EQ',
+        product_type: str = 'CNC',
+        order_type: str = 'LIMIT',
+        order_flag: str = 'SINGLE',
+        symbol: str = '',
+    ) -> dict:
+        """
+        Create a Forever Order / Price Trigger Alert via DhanHQ API.
+        Triggers an order on Dhan servers when price reaches trigger_price.
+        """
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            tx_type = self._client.BUY if transaction_type.upper() == 'BUY' else self._client.SELL
+            prod_type = getattr(self._client, product_type.upper(), self._client.CNC)
+            ord_type = getattr(self._client, order_type.upper(), self._client.LIMIT)
+
+            result = self._client.place_forever(
+                security_id=str(security_id),
+                exchange_segment=exchange_segment,
+                transaction_type=tx_type,
+                product_type=prod_type,
+                order_type=ord_type,
+                quantity=int(quantity),
+                price=float(price),
+                trigger_Price=float(trigger_price),
+                order_flag=order_flag,
+                symbol=symbol
+            )
+            logger.info("DhanHQ place_forever response: %s", result)
+            return result or {'status': 'failure', 'remarks': 'Empty response'}
+        except Exception as exc:
+            logger.exception("DhanHQ place_forever error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
+    def get_order_list(self) -> list[dict]:
+        """Fetch all orders for the current trading day."""
+        if not self.is_active:
+            return []
+        try:
+            result = self._client.get_order_list()
+            if result and result.get('status') == 'success':
+                return result.get('data', [])
+        except Exception as exc:
+            logger.exception("DhanHQ get_order_list error: %s", exc)
+        return []
+
+    def get_forever_orders(self) -> list[dict]:
+        """Fetch all active Forever orders / trigger alerts."""
+        if not self.is_active:
+            return []
+        try:
+            result = self._client.get_forever()
+            if result and result.get('status') == 'success':
+                return result.get('data', [])
+        except Exception as exc:
+            logger.exception("DhanHQ get_forever error: %s", exc)
+        return []
+
+    def cancel_order(self, order_id: str) -> dict:
+        """Cancel a pending order."""
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            return self._client.cancel_order(order_id=str(order_id))
+        except Exception as exc:
+            logger.exception("DhanHQ cancel_order error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
+    def cancel_super_order(self, order_id: str, leg_name: str = 'ENTRY_LEG') -> dict:
+        """Cancel a Super Order."""
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            return self._client.cancel_super_order(order_id=str(order_id), leg_name=leg_name)
+        except Exception as exc:
+            logger.exception("DhanHQ cancel_super_order error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
+    def cancel_forever_order(self, order_id: str) -> dict:
+        """Cancel a Forever trigger alert order."""
+        if not self.is_active:
+            return {'status': 'failure', 'remarks': 'Dhan service inactive'}
+        try:
+            return self._client.cancel_forever(order_id=str(order_id))
+        except Exception as exc:
+            logger.exception("DhanHQ cancel_forever error: %s", exc)
+            return {'status': 'failure', 'remarks': str(exc)}
+
     # ─────────────────────────────────────────────────────────────────────────
     # Positions & Holdings
     # ─────────────────────────────────────────────────────────────────────────
@@ -345,6 +621,7 @@ class DhanService:
         except Exception as exc:
             logger.exception("DhanHQ get_holdings error: %s", exc)
         return []
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

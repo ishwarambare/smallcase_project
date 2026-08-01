@@ -27,5 +27,18 @@ urlpatterns = [
     # Technical indicators: EMA 20/50, RSI 14 + smoothing (GET)
     path('api/demand-supply/indicators/<str:symbol>/', indicators.get_indicators, name='api_indicators'),
     path('demand-supply/tv-chart/<str:symbol>/', views.demand_supply_tv_chart, name='demand_supply_tv_chart'),
+
+    # ── Dhan API Endpoints ────────────────────────────────────────────────────
+    path('api/dhan/status/', views.dhan_status, name='dhan_status'),
+    path('api/dhan/calculate-order/', views.dhan_calculate_order, name='dhan_calculate_order'),
+    path('api/dhan/place-super-order/', views.dhan_place_super_order, name='dhan_place_super_order'),
+    path('api/dhan/place-alert/', views.dhan_place_alert, name='dhan_place_alert'),
+    path('api/dhan/orders/', views.dhan_orders, name='dhan_orders'),
+    path('api/dhan/cancel-order/', views.dhan_cancel_order, name='dhan_cancel_order'),
+
+    # ── Fyers API Endpoints ───────────────────────────────────────────────────
+    path('api/fyers/status/', views.fyers_status, name='fyers_status'),
+    path('api/fyers/place-super-order/', views.fyers_place_super_order, name='fyers_place_super_order'),
+    path('api/fyers/place-alert/', views.fyers_place_alert, name='fyers_place_alert'),
 ]
 

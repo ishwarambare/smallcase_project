@@ -456,6 +456,41 @@
         .zone-info-chip.demand { background: rgba(16,185,129,0.15); color: var(--demand); border: 1px solid rgba(16,185,129,0.3); }
         .zone-info-chip.supply { background: rgba(239,68,68,0.15);  color: var(--supply); border: 1px solid rgba(239,68,68,0.3); }
 
+        /* ── Dhan Trading Panel CSS ───────────────────────────────── */
+        .dhan-panel { background: rgba(59, 130, 246, 0.05); border-bottom: 1px solid var(--border); }
+        .dhan-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; background: var(--bg-card); color: var(--text-sec); border: 1px solid var(--border); }
+        .dhan-badge.active { background: rgba(16, 185, 129, 0.2); color: var(--demand); border: 1px solid var(--demand); }
+        .dhan-badge.error { background: rgba(239, 68, 68, 0.2); color: var(--supply); border: 1px solid var(--supply); }
+
+        .dhan-account-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin-bottom: 10px; }
+        .dhan-acc-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-sec); margin-bottom: 2px; }
+
+        .dhan-side-selector { display: flex; gap: 4px; margin-bottom: 8px; }
+        .side-btn { flex: 1; padding: 5px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-sec); font-size: 0.75rem; font-weight: 700; border-radius: 4px; cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; }
+        .side-btn.buy.active { background: #10b981; color: #fff; border-color: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+        .side-btn.sell.active { background: #ef4444; color: #fff; border-color: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+
+        .dhan-product-type-selector { margin-bottom: 8px; }
+        .dhan-product-type-select { width: 100%; padding: 4px; background: var(--bg-input); border: 1px solid var(--border-lit); border-radius: 4px; color: var(--text-pri); font-size: 0.75rem; font-family: 'Inter', sans-serif; }
+
+        .dhan-input-group { margin-bottom: 8px; }
+        .dhan-input-label { font-size: 0.7rem; color: var(--text-sec); font-weight: 600; display: block; margin-bottom: 3px; }
+        .dhan-input { width: 100%; padding: 5px 8px; background: var(--bg-input); border: 1px solid var(--border-lit); border-radius: 4px; color: var(--text-pri); font-size: 0.8rem; font-family: 'Inter', sans-serif; }
+        .dhan-input:focus { border-color: var(--accent); outline: none; }
+
+        .dhan-mini-btn { font-size: 0.65rem; background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 1px 5px; border-radius: 3px; cursor: pointer; }
+        .dhan-mini-btn:hover { background: var(--accent); color: #fff; }
+
+        .dhan-calc-box { background: var(--bg-card); border: 1px solid var(--border-lit); border-radius: 4px; padding: 8px; margin: 10px 0; }
+        .calc-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-sec); margin-bottom: 3px; }
+        .calc-val { color: var(--text-pri); }
+
+        .dhan-action-btn { width: 100%; padding: 8px; border: none; border-radius: 4px; font-weight: 700; font-size: 0.78rem; cursor: pointer; transition: all 0.15s; margin-bottom: 5px; font-family: 'Inter', sans-serif; }
+        .dhan-action-btn.primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; box-shadow: 0 2px 10px rgba(59,130,246,0.3); }
+        .dhan-action-btn.primary:hover { opacity: 0.95; transform: translateY(-1px); }
+        .dhan-action-btn.secondary { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.4); }
+        .dhan-action-btn.secondary:hover { background: rgba(245, 158, 11, 0.3); }
+
         /* ── Scrollbar hide ──────────────────────────────────────── */
         .filter-panel::-webkit-scrollbar { width: 3px; }
 
@@ -510,6 +545,119 @@
 
         <!-- ── Filter Sidebar ───────────────────────────────────── -->
         <aside class="filter-panel">
+
+            <!-- ── Broker & Super Order Panel ─────────────────────── -->
+            <div class="filter-section dhan-panel">
+                <div class="filter-section-title" style="display:flex;align-items:center;justify-content:space-between; margin-bottom: 8px;">
+                    <span id="panel-title">⚡ Dhan Trading Panel</span>
+                    <span class="dhan-badge" id="broker-status-badge">Connecting...</span>
+                </div>
+                
+                <!-- Broker Toggle -->
+                <div class="broker-toggle-group" style="display:flex; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
+                    <button type="button" class="broker-btn active" id="btn-broker-dhan" style="flex:1; padding: 6px; background:var(--accent); color:#fff; border:none; cursor:pointer; font-size:12px; font-weight:600;">DHAN</button>
+                    <button type="button" class="broker-btn" id="btn-broker-fyers" style="flex:1; padding: 6px; background:transparent; color:var(--text-light); border:none; cursor:pointer; font-size:12px; font-weight:600;">FYERS</button>
+                </div>
+
+                <!-- Account Card -->
+                <div class="dhan-account-card">
+                    <div class="dhan-acc-row">
+                        <span>Client ID:</span>
+                        <strong id="broker-acc-id">...</strong>
+                    </div>
+                    <div class="dhan-acc-row">
+                        <span>Avail Margin:</span>
+                        <strong id="broker-acc-balance" style="color:var(--demand);">Checking...</strong>
+                    </div>
+                </div>
+
+                <!-- Side Selector -->
+                <div class="dhan-side-selector">
+                    <button type="button" class="side-btn buy active" id="dhan-side-buy">BUY (LONG)</button>
+                    <button type="button" class="side-btn sell" id="dhan-side-sell">SELL (SHORT)</button>
+                </div>
+
+                <!-- Product Type Selector -->
+                <div class="dhan-product-type-selector">
+                    <select id="dhan-product-type" class="dhan-product-type-select">
+                        <option value="INTRA">Intraday (Margin)</option>
+                        <option value="CNC">Delivery (CNC)</option>
+                    </select>
+                </div>
+
+                <!-- Capital & Risk Controls -->
+                <div class="dhan-input-group">
+                    <label class="dhan-input-label">Capital (₹):</label>
+                    <input type="number" id="dhan-capital" class="dhan-input" value="100000" step="5000">
+                </div>
+
+                <div style="display:flex;gap:6px;">
+                    <div class="dhan-input-group" style="flex:1;">
+                        <label class="dhan-input-label">Risk %:</label>
+                        <input type="number" id="dhan-risk-pct" class="dhan-input" value="1.0" step="0.1" min="0.1">
+                    </div>
+                    <div class="dhan-input-group" style="flex:1;">
+                        <label class="dhan-input-label">Reward Ratio:</label>
+                        <input type="number" id="dhan-reward-ratio" class="dhan-input" value="2.0" step="0.1" min="0.5">
+                    </div>
+                </div>
+
+                <!-- Price Inputs -->
+                <div class="dhan-input-group">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <label class="dhan-input-label">Entry Price (₹):</label>
+                        <button type="button" class="dhan-mini-btn" id="btn-pick-entry" title="Click on chart to pick Entry price">📍 Chart Pick</button>
+                    </div>
+                    <input type="number" id="dhan-entry-price" class="dhan-input" placeholder="e.g. 100.00" step="0.05">
+                </div>
+
+                <div class="dhan-input-group">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <label class="dhan-input-label">Stop Loss Price (₹):</label>
+                        <div style="display:flex;gap:4px;">
+                            <button type="button" class="dhan-mini-btn" id="btn-pick-sl" title="Click on chart to pick Stop Loss price">📍 Chart Pick</button>
+                            <button type="button" class="dhan-mini-btn" id="btn-auto-sl" title="Auto-set SL from nearest zone distal line">🎯 Distal Line</button>
+                        </div>
+                    </div>
+                    <input type="number" id="dhan-stop-loss" class="dhan-input" placeholder="e.g. 95.00" step="0.05">
+                </div>
+
+                <!-- Dynamic Calculation Summary Box -->
+                <div class="dhan-calc-box">
+                    <div class="calc-row">
+                        <span>Gap (Entry - SL):</span>
+                        <span id="dhan-val-gap" class="calc-val">₹0.00</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Target Price:</span>
+                        <span id="dhan-val-target" class="calc-val" style="color:var(--demand);font-weight:700;">₹0.00</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Quantity (Shares):</span>
+                        <span id="dhan-val-qty" class="calc-val" style="font-weight:700;">0 shares</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Exposure Needed:</span>
+                        <span id="dhan-val-exposure" class="calc-val">₹0.00</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Max Risk (Loss):</span>
+                        <span id="dhan-val-loss" class="calc-val" style="color:var(--supply);">₹0.00 (1.0%)</span>
+                    </div>
+                    <div class="calc-row">
+                        <span>Target Reward:</span>
+                        <span id="dhan-val-profit" class="calc-val" style="color:var(--demand);">₹0.00 (2.0%)</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <button type="button" id="btn-submit-super-order" class="dhan-action-btn primary">
+                    🚀 Place Super Order (Dhan)
+                </button>
+                <button type="button" id="btn-submit-forever-alert" class="dhan-action-btn secondary">
+                    🔔 Create Forever Trigger Alert
+                </button>
+            </div>
 
             <!-- Zone Filters -->
             <div class="filter-section">

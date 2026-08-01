@@ -966,3 +966,200 @@ def batch_scan(symbols: list[str], fyers_svc=None, progress_callback=None) -> di
         'errors': errors,
         'scan_time_seconds': round(elapsed, 2),
     }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Dhan Risk-Reward & Super Order Integration Engine
+# ═════════════════════════════════════════════════════════════════════════════
+
+def calculate_dhan_super_order(
+    entry_price: float,
+    stop_loss_price: float,
+    capital: float = 100000.0,
+    risk_pct: float = 1.0,
+    reward_ratio: float = 2.0,
+    side: str = 'BUY'
+) -> dict:
+    """
+    Calculates position size (quantity), target price, exposure, max risk, and potential reward
+    for placing a Dhan Super Order (Bracket Order).
+
+    Rules:
+      - Capital e.g. ₹100,000
+      - Max Risk Amount = 1% of Capital = ₹1,000
+      - Gap = |Entry - Stop Loss|
+      - Target Gap = Reward Ratio (e.g. 2.0) * Gap
+      - Quantity = Max Risk Amount / Gap
+      - Target Price:
+          BUY:  Entry + Target Gap
+          SELL: Entry - Target Gap
+    """
+    entry_price = float(entry_price)
+    stop_loss_price = float(stop_loss_price)
+    capital = float(capital)
+    risk_pct = float(risk_pct)
+    reward_ratio = float(reward_ratio)
+    side = side.upper().strip()
+
+    max_risk_amount = capital * (risk_pct / 100.0)
+    gap = abs(entry_price - stop_loss_price)
+
+    if gap < 0.01:
+        return {
+            'success': False,
+            'error': 'Entry price and Stop Loss price must have a difference of at least 0.01',
+        }
+
+    quantity = int(max_risk_amount // gap)
+    if quantity < 1:
+        quantity = 1  # Minimum 1 share
+
+    target_gap = reward_ratio * gap
+    if side == 'BUY':
+        target_price = round(entry_price + target_gap, 2)
+    else:
+        target_price = round(entry_price - target_gap, 2)
+
+    total_exposure = round(quantity * entry_price, 2)
+    potential_loss = round(quantity * gap, 2)
+    potential_profit = round(quantity * target_gap, 2)
+
+    return {
+        'success': True,
+        'side': side,
+        'entry_price': round(entry_price, 2),
+        'stop_loss_price': round(stop_loss_price, 2),
+        'gap': round(gap, 2),
+        'target_price': target_price,
+        'quantity': quantity,
+        'capital': capital,
+        'max_risk_amount': round(max_risk_amount, 2),
+        'target_reward_amount': round(max_risk_amount * reward_ratio, 2),
+        'total_exposure': total_exposure,
+        'potential_loss': potential_loss,
+        'potential_profit': potential_profit,
+        'reward_risk_ratio': reward_ratio,
+        'actual_risk_pct': round((potential_loss / capital) * 100, 2) if capital > 0 else 0.0,
+        'actual_reward_pct': round((potential_profit / capital) * 100, 2) if capital > 0 else 0.0,
+    }
+
+
+def execute_dhan_zone_super_order(
+    symbol: str,
+    entry_price: float,
+    stop_loss_price: float,
+    capital: float = 100000.0,
+    risk_pct: float = 1.0,
+    reward_ratio: float = 2.0,
+    side: str = 'BUY',
+    order_type: str = 'LIMIT',
+    product_type: str = 'INTRA',
+) -> dict:
+    """
+    Calculates parameters and places a Super Order on Dhan API.
+    """
+    from stocks.dhan_service import dhan_service
+
+    if not dhan_service.is_active:
+        return {
+            'success': False,
+            'error': 'Dhan API service is not configured or inactive. Check .env credentials.',
+        }
+
+    sec_info = dhan_service.get_security_id(symbol)
+    if not sec_info:
+        return {
+            'success': False,
+            'error': f'No Dhan security_id found for symbol {symbol}',
+        }
+
+    calc = calculate_dhan_super_order(
+        entry_price=entry_price,
+        stop_loss_price=stop_loss_price,
+        capital=capital,
+        risk_pct=risk_pct,
+        reward_ratio=reward_ratio,
+        side=side
+    )
+    if not calc.get('success'):
+        return calc
+
+    response = dhan_service.place_super_order(
+        security_id=sec_info['security_id'],
+        transaction_type=side,
+        quantity=calc['quantity'],
+        price=calc['entry_price'],
+        target_price=calc['target_price'],
+        stop_loss_price=calc['stop_loss_price'],
+        exchange_segment=sec_info['exchange'],
+        order_type=order_type,
+        product_type=product_type,
+        tag=f'ZONE_{side}'
+    )
+
+    return {
+        'success': response.get('status') == 'success',
+        'dhan_response': response,
+        'calculation': calc,
+        'order_id': response.get('data', {}).get('orderId') if isinstance(response.get('data'), dict) else response.get('orderId'),
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Fyers Risk-Reward & Super Order Integration Engine
+# ═════════════════════════════════════════════════════════════════════════════
+
+def execute_fyers_zone_super_order(
+    symbol: str,
+    entry_price: float,
+    stop_loss_price: float,
+    capital: float = 100000.0,
+    risk_pct: float = 1.0,
+    reward_ratio: float = 2.0,
+    side: str = 'BUY',
+    order_type: int = 1, # 1: Limit
+    product_type: str = 'CNC',
+) -> dict:
+    """
+    Calculates parameters and places a Super Order on Fyers API.
+    Fyers Bracket Order takes stopLoss and takeProfit as absolute point values.
+    """
+    from stocks.fyers_service import fyers_service
+
+    if not fyers_service.is_active:
+        return {
+            'success': False,
+            'error': 'Fyers API service is not configured or inactive. Check .env credentials.',
+        }
+
+    # We reuse Dhan's math engine since risk-reward formulas are broker-independent
+    calc = calculate_dhan_super_order(
+        entry_price=entry_price,
+        stop_loss_price=stop_loss_price,
+        capital=capital,
+        risk_pct=risk_pct,
+        reward_ratio=reward_ratio,
+        side=side
+    )
+    if not calc.get('success'):
+        return calc
+
+    # Instead of BO Order with points gap, we use absolute prices for GTT OCO
+    response = fyers_service.place_super_order_gtt(
+        symbol=symbol,
+        side=side,
+        quantity=calc['quantity'],
+        entry_price=calc['entry_price'],
+        stop_loss_price=calc['stop_loss_price'],
+        target_price=calc['target_price'],
+        product_type=product_type
+    )
+
+    return {
+        'success': response.get('s') == 'ok',
+        'fyers_response': response,
+        'calculation': calc,
+        'order_id': response.get('entry_id'),
+        'oco_id': response.get('oco_id')
+    }
+

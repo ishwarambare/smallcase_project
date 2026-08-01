@@ -596,6 +596,190 @@ class FyersService:
         except Exception as exc:
             logger.exception("get_funds error: %s", exc); return None
 
+    # ── Order Management ──────────────────────────────────────────────────────
+
+    def get_security_id(self, symbol: str) -> str:
+        """Convert 'RELIANCE' to 'NSE:RELIANCE-EQ'"""
+        return f"NSE:{symbol.upper().strip()}-EQ"
+
+    def place_super_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: int,
+        entry_price: float,
+        stop_loss_diff: float,
+        target_diff: float,
+        order_type: int = 1,
+        product_type: str = 'CNC'
+    ) -> dict:
+        """
+        Place Bracket Order (BO) via Fyers.
+        Fyers BO requires stopLoss and takeProfit as absolute point values (gap).
+        """
+        if not self.is_active: return {'s': 'error', 'message': 'Fyers client not active'}
+        try:
+            data = {
+                "symbol": self.get_security_id(symbol),
+                "qty": int(quantity),
+                "type": order_type,
+                "side": 1 if side.upper() == 'BUY' else -1,
+                "productType": product_type,
+                "limitPrice": round(round(entry_price * 20) / 20, 2) if order_type == 1 else 0.0,
+                "stopPrice": 0,
+                "validity": "DAY",
+                "disclosedQty": 0,
+                "offlineOrder": False,
+                "stopLoss": round(round(stop_loss_diff * 20) / 20, 2),
+                "takeProfit": round(round(target_diff * 20) / 20, 2)
+            }
+            logger.info("Fyers place_super_order payload: %s", data)
+            response = self._fyers.place_order(data=data)
+            logger.info("Fyers place_super_order response: %s", response)
+            return response
+        except Exception as exc:
+            logger.exception("Fyers place_super_order error: %s", exc)
+            return {'s': 'error', 'message': str(exc)}
+
+    def place_super_order_gtt(
+        self,
+        symbol: str,
+        side: str,
+        quantity: int,
+        entry_price: float,
+        stop_loss_price: float,
+        target_price: float,
+        product_type: str = 'CNC'
+    ) -> dict:
+        """
+        Places two GTT orders:
+        1. A Single GTT for the Entry.
+        2. A GTT OCO (One Cancels Other) for the Target and Stop Loss.
+        """
+        if not self.is_active: return {'s': 'error', 'message': 'Fyers client not active'}
+        try:
+            sec_id = self.get_security_id(symbol)
+            entry_side = 1 if side.upper() == 'BUY' else -1
+            exit_side = -1 if side.upper() == 'BUY' else 1
+            
+            # Format prices to nearest 0.05 tick size
+            entry_p = round(round(entry_price * 20) / 20, 2)
+            sl_p = round(round(stop_loss_price * 20) / 20, 2)
+            tgt_p = round(round(target_price * 20) / 20, 2)
+            
+            # 1. Place Entry GTT
+            entry_data = {
+                "symbol": sec_id,
+                "side": entry_side,
+                "productType": product_type,
+                "orderInfo": {
+                    "leg1": {
+                        "price": entry_p,
+                        "triggerPrice": entry_p,
+                        "qty": int(quantity)
+                    }
+                }
+            }
+            logger.info("Fyers GTT Entry payload: %s", entry_data)
+            entry_res = self._fyers.place_gtt_order(data=entry_data)
+            if entry_res.get('s') != 'ok':
+                logger.error("Fyers GTT Entry failed: %s", entry_res)
+                return entry_res
+                
+            entry_id = entry_res.get('id')
+            
+            # 2. Place Exit OCO GTT
+            # For OCO, leg1 trigger price > LTP, leg2 trigger price < LTP
+            # For a BUY order, Exit is a SELL. Target > LTP (leg1), SL < LTP (leg2).
+            # For a SELL order, Exit is a BUY. SL > LTP (leg1), Target < LTP (leg2).
+            
+            if side.upper() == 'BUY':
+                leg1_price = tgt_p # Higher
+                leg2_price = sl_p  # Lower
+            else:
+                leg1_price = sl_p  # Higher
+                leg2_price = tgt_p # Lower
+                
+            oco_data = {
+                "symbol": sec_id,
+                "side": exit_side,
+                "productType": product_type,
+                "orderInfo": {
+                    "leg1": {
+                        "price": leg1_price,
+                        "triggerPrice": leg1_price,
+                        "qty": int(quantity)
+                    },
+                    "leg2": {
+                        "price": leg2_price,
+                        "triggerPrice": leg2_price,
+                        "qty": int(quantity)
+                    }
+                }
+            }
+            logger.info("Fyers GTT OCO payload: %s", oco_data)
+            oco_res = self._fyers.place_gtt_order(data=oco_data)
+            if oco_res.get('s') != 'ok':
+                logger.error("Fyers GTT OCO failed: %s", oco_res)
+                return oco_res
+                
+            oco_id = oco_res.get('id')
+            
+            return {
+                's': 'ok',
+                'entry_id': entry_id,
+                'oco_id': oco_id,
+                'message': f'GTT Orders Placed! Entry ID: {entry_id}, OCO ID: {oco_id}'
+            }
+            
+        except Exception as exc:
+            logger.exception("Fyers place_super_order_gtt error: %s", exc)
+            return {'s': 'error', 'message': str(exc)}
+
+    def place_alert(self, symbol: str, trigger_price: float, side: str, quantity: int = 1) -> dict:
+        """
+        Place Alert via Fyers Automate Webhook.
+        Since Fyers API does not natively support GTT creation via API, 
+        we use the user's Fyers Automate Webhook URL.
+        """
+        import os, requests
+        webhook_url = os.environ.get("FYERS_AUTOMATE_WEBHOOK_URL", "").strip()
+        
+        if not webhook_url:
+            return {
+                's': 'error', 
+                'message': 'FYERS_AUTOMATE_WEBHOOK_URL is missing in .env! Please generate a webhook URL in Fyers Web and add it to .env to use chart alerts without margin.'
+            }
+            
+        try:
+            # Standard Fyers Webhook payload structure
+            data = {
+                "symbol": self.get_security_id(symbol),
+                "qty": int(quantity),
+                "type": 1, # Limit
+                "side": 1 if side.upper() == 'BUY' else -1,
+                "productType": "INTRADAY",
+                "limitPrice": round(trigger_price, 2),
+                "stopPrice": 0,
+                "validity": "DAY",
+                "disclosedQty": 0,
+                "offlineOrder": False
+            }
+            
+            headers = {'Content-Type': 'application/json'}
+            resp = requests.post(webhook_url, json=data, headers=headers)
+            
+            if resp.status_code in [200, 201, 202]:
+                logger.info("Fyers Webhook Alert sent: %s", resp.text)
+                return {'s': 'ok', 'message': 'Webhook alert sent successfully'}
+            else:
+                logger.error("Fyers Webhook Alert failed: %s %s", resp.status_code, resp.text)
+                return {'s': 'error', 'message': f"Webhook Failed: {resp.status_code} {resp.text}"}
+                
+        except Exception as exc:
+            logger.exception("Fyers place_alert error: %s", exc)
+            return {'s': 'error', 'message': str(exc)}
+
     def get_quotes(self, symbols: list[str]) -> list[dict]:
         """Live quotes. symbols=['NSE:RELIANCE-EQ', 'NSE:TCS-EQ']"""
         if not self.is_active: return []

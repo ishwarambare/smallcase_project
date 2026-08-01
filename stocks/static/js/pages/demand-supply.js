@@ -31,35 +31,35 @@
     };
 
     // ─── DOM Refs ──────────────────────────────────────────────
-    const scanBtn       = document.getElementById('ds-scan-btn');
-    const progressBar   = document.getElementById('ds-progress-bar');
-    const progressFill  = document.getElementById('ds-progress-fill');
-    const progressText  = document.getElementById('ds-progress-text');
-    const tableBody     = document.getElementById('ds-table-body');
+    const scanBtn = document.getElementById('ds-scan-btn');
+    const progressBar = document.getElementById('ds-progress-bar');
+    const progressFill = document.getElementById('ds-progress-fill');
+    const progressText = document.getElementById('ds-progress-text');
+    const tableBody = document.getElementById('ds-table-body');
     const sectorContainer = document.getElementById('ds-sector-cards');
-    const modalOverlay  = document.getElementById('ds-modal-overlay');
-    const modalBody     = document.getElementById('ds-modal-body');
-    const modalTitle    = document.getElementById('ds-modal-title');
-    const modalClose    = document.getElementById('ds-modal-close');
-    const lastScanEl    = document.getElementById('ds-last-scan');
-    const emptyState    = document.getElementById('ds-empty-state');
-    const tableWrapper  = document.getElementById('ds-table-wrapper');
+    const modalOverlay = document.getElementById('ds-modal-overlay');
+    const modalBody = document.getElementById('ds-modal-body');
+    const modalTitle = document.getElementById('ds-modal-title');
+    const modalClose = document.getElementById('ds-modal-close');
+    const lastScanEl = document.getElementById('ds-last-scan');
+    const emptyState = document.getElementById('ds-empty-state');
+    const tableWrapper = document.getElementById('ds-table-wrapper');
 
     // Summary stat elements
-    const statTotal  = document.getElementById('stat-total');
+    const statTotal = document.getElementById('stat-total');
     const statDemand = document.getElementById('stat-demand');
     const statSupply = document.getElementById('stat-supply');
     const statTriple = document.getElementById('stat-triple');
 
     // Filter elements
-    const filterSearch   = document.getElementById('filter-search');
+    const filterSearch = document.getElementById('filter-search');
     const filterZoneType = document.getElementById('filter-zone-type');
-    const filterOverlap  = document.getElementById('filter-overlap');
-    const filterSector   = document.getElementById('filter-sector');
-    const filterSort     = document.getElementById('filter-sort');
-    const filterFresh    = document.getElementById('filter-fresh');
-    const filterClear    = document.getElementById('filter-clear');
-    const tfChips        = document.querySelectorAll('.ds-tf-chip');
+    const filterOverlap = document.getElementById('filter-overlap');
+    const filterSector = document.getElementById('filter-sector');
+    const filterSort = document.getElementById('filter-sort');
+    const filterFresh = document.getElementById('filter-fresh');
+    const filterClear = document.getElementById('filter-clear');
+    const tfChips = document.querySelectorAll('.ds-tf-chip');
 
     // ─── CSRF Token ────────────────────────────────────────────
     function getCsrfToken() {
@@ -113,10 +113,10 @@
             const data = await resp.json();
 
             if (data.status === 'PROGRESS' && data.progress) {
-                const pct     = data.progress.percent || 0;
-                const symbol  = data.progress.symbol || '...';
+                const pct = data.progress.percent || 0;
+                const symbol = data.progress.symbol || '...';
                 const current = data.progress.current || 0;
-                const total   = data.progress.total || 0;
+                const total = data.progress.total || 0;
                 progressFill.style.width = pct + '%';
                 progressText.innerHTML = `Scanning <span>${symbol}</span> (${current}/${total}) — ${pct}%`;
 
@@ -200,14 +200,14 @@
     function applyClientFilters() {
         const searchTerm = (filterSearch ? filterSearch.value.trim().toLowerCase() : '');
         const minOverlap = parseInt(currentFilters.min_overlap) || 0;
-        const sector     = currentFilters.sector;
-        const zoneType   = currentFilters.zone_type;
+        const sector = currentFilters.sector;
+        const zoneType = currentFilters.zone_type;
 
         let filtered = allResults.filter(r => {
             // Symbol / name search
             if (searchTerm) {
-                const sym  = (r.symbol || '').toLowerCase();
-                const name = (r.name   || '').toLowerCase();
+                const sym = (r.symbol || '').toLowerCase();
+                const name = (r.name || '').toLowerCase();
                 if (!sym.includes(searchTerm) && !name.includes(searchTerm)) return false;
             }
 
@@ -233,7 +233,7 @@
         const sortBy = currentFilters.sort_by;
         filtered.sort((a, b) => {
             if (sortBy === 'strength_score') return b.strongest_zone_score - a.strongest_zone_score;
-            if (sortBy === 'sector')         return (a.sector || '').localeCompare(b.sector || '');
+            if (sortBy === 'sector') return (a.sector || '').localeCompare(b.sector || '');
             // default: overlap_count
             const aOv = zoneType === 'supply' ? a.supply_overlap_count : a.demand_overlap_count;
             const bOv = zoneType === 'supply' ? b.supply_overlap_count : b.demand_overlap_count;
@@ -259,7 +259,7 @@
         tableBody.innerHTML = results.map(r => {
             const demandOv = r.demand_overlap_count || 0;
             const supplyOv = r.supply_overlap_count || 0;
-            const score    = r.strongest_zone_score || 0;
+            const score = r.strongest_zone_score || 0;
 
             return `
                 <tr data-symbol="${r.symbol}" onclick="window.dsShowDetail('${r.symbol}')">
@@ -270,11 +270,11 @@
                     <td class="price">₹${formatPrice(r.current_price)}</td>
                     <td><span class="stock-sector">${r.sector || '—'}</span></td>
                     <td>${zoneBadge(r.quarterly_demand, r.quarterly_supply)}</td>
-                    <td>${zoneBadge(r.monthly_demand,  r.monthly_supply)}</td>
-                    <td>${zoneBadge(r.weekly_demand,   r.weekly_supply)}</td>
-                    <td>${zoneBadge(r.daily_demand,    r.daily_supply)}</td>
-                    <td>${zoneBadge(r.min125_demand,   r.min125_supply)}</td>
-                    <td>${zoneBadge(r.min75_demand,    r.min75_supply)}</td>
+                    <td>${zoneBadge(r.monthly_demand, r.monthly_supply)}</td>
+                    <td>${zoneBadge(r.weekly_demand, r.weekly_supply)}</td>
+                    <td>${zoneBadge(r.daily_demand, r.daily_supply)}</td>
+                    <td>${zoneBadge(r.min125_demand, r.min125_supply)}</td>
+                    <td>${zoneBadge(r.min75_demand, r.min75_supply)}</td>
                     <td>${overlapBadge(demandOv, 'demand')}</td>
                     <td>${overlapBadge(supplyOv, 'supply')}</td>
                     <td>${strengthBar(score)}</td>
@@ -346,17 +346,17 @@
             // Freshness: fresh on top
             if (a.is_fresh && !b.is_fresh) return -1;
             if (!a.is_fresh && b.is_fresh) return 1;
-            
+
             // Timeframe order
             const aTf = (a.timeframe || '').toLowerCase();
             const bTf = (b.timeframe || '').toLowerCase();
             const aRank = tfOrder[aTf] || 99;
             const bRank = tfOrder[bTf] || 99;
-            
+
             if (aRank !== bRank) {
                 return aRank - bRank;
             }
-            
+
             return 0;
         });
     }
@@ -398,7 +398,7 @@
             html += '<p style="text-align:center; color: var(--text-secondary); padding: 2rem;">No zones detected for this stock.</p>';
         } else {
             html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">';
-            
+
             // Demand Column
             html += '<div>';
             html += `<h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #10b981;">📈 Demand Zones (${demandZones.length})</h3>`;
@@ -478,7 +478,7 @@
             : '<span class="fresh-badge tested" style="display: inline-block; padding: 2px 4px; font-size: 0.7rem;">⚡ Tested</span>';
 
         const color = type === 'demand' ? '#10b981' : '#ef4444';
-        
+
         return `
             <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 0.5rem; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; color: ${color};">
@@ -508,7 +508,7 @@
     // ─── Stats ─────────────────────────────────────────────────
     function updateSummaryStats(results) {
         if (!results) return;
-        if (statTotal)  statTotal.textContent  = results.length;
+        if (statTotal) statTotal.textContent = results.length;
         if (statDemand) statDemand.textContent = results.filter(r => r.demand_overlap_count > 0).length;
         if (statSupply) statSupply.textContent = results.filter(r => r.supply_overlap_count > 0).length;
         if (statTriple) statTriple.textContent = results.filter(r => r.demand_overlap_count >= 3).length;
@@ -552,12 +552,12 @@
 
     // ─── Clear all filters ─────────────────────────────────────
     function clearAllFilters() {
-        if (filterSearch)   filterSearch.value = '';
+        if (filterSearch) filterSearch.value = '';
         if (filterZoneType) filterZoneType.value = 'demand';
-        if (filterOverlap)  filterOverlap.value = '0';
-        if (filterSector)   filterSector.value = '';
-        if (filterSort)     filterSort.value = 'overlap_count';
-        if (filterFresh)    filterFresh.classList.remove('active');
+        if (filterOverlap) filterOverlap.value = '0';
+        if (filterSector) filterSector.value = '';
+        if (filterSort) filterSort.value = 'overlap_count';
+        if (filterFresh) filterFresh.classList.remove('active');
 
         activeTimeframes = [];
         tfChips.forEach(c => c.classList.remove('active'));

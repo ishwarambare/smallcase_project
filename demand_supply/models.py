@@ -43,9 +43,9 @@ class DemandSupplyZone(models.Model):
         help_text='Edge of zone furthest from current price (stop-loss reference)'
     )
     formed_date = models.DateField(help_text='Date when the zone first formed')
-    strength_score = models.IntegerField(
-        default=0,
-        help_text='Zone strength score 0-100 based on freshness, tightness, move strength, volume'
+    strength_score = models.FloatField(
+        default=0.0,
+        help_text='Zone strength score out of 7 (Core) or 14 (Expanded)'
     )
     is_fresh = models.BooleanField(
         default=True,
@@ -119,9 +119,9 @@ class DemandSupplyScanResult(models.Model):
     min75_supply = models.BooleanField(default=False)
 
     # Strongest zone score across all timeframes
-    strongest_zone_score = models.IntegerField(
-        default=0, db_index=True,
-        help_text='Highest zone strength score (0-100) across all detected zones'
+    strongest_zone_score = models.FloatField(
+        default=0.0, db_index=True,
+        help_text='Highest zone strength score out of 7/14 across all detected zones'
     )
 
     # Full zone details as JSON (for UI rendering)

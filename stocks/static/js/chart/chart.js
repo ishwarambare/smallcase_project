@@ -269,6 +269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 zoneRenderer.zones     = allZones;
                 zoneRenderer.currentTf = tf;
                 zoneRenderer.maxDate   = maxDate;
+                zoneRenderer.candleData = candles;
                 zoneRenderer.setCurrentPrice(lastClose);
                 zoneRenderer.setCrossovers(filterState.showCrossovers ? lastCrossovers : []);
                 zoneRenderer.draw();

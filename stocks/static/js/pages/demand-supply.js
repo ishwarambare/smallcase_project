@@ -461,13 +461,15 @@
     }
 
     function strengthBar(score) {
-        const cls = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+        const numScore = parseFloat(score) || 0;
+        const widthPct = Math.min((numScore / 7.0) * 100, 100);
+        const cls = numScore >= 6 ? 'high' : numScore >= 4 ? 'medium' : 'low';
         return `
             <div class="strength-bar-container">
                 <div class="strength-bar">
-                    <div class="strength-bar-fill ${cls}" style="width: ${score}%"></div>
+                    <div class="strength-bar-fill ${cls}" style="width: ${widthPct}%"></div>
                 </div>
-                <span class="strength-score">${score}</span>
+                <span class="strength-score" style="font-size: 0.75rem;">${numScore}/7</span>
             </div>
         `;
     }

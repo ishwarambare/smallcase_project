@@ -28,6 +28,7 @@ class ZoneRenderer {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.zones = zones;
+        this.candleData = candleData || [];
         this.currentTf = currentTf;
         this.filters = this._defaultFilters(filters);
 
@@ -214,7 +215,21 @@ class ZoneRenderer {
         // X coordinates
         const startDateStr = zone.formed_date || this.maxDate;
         let x1 = this.chart.timeScale().timeToCoordinate(startDateStr);
-        if (x1 === null) x1 = 0;
+        if (x1 === null) {
+            // Find the closest valid date in candleData (handles both YYYY-MM-DD strings and Unix timestamps)
+            let closestTime = this.maxDate;
+            const targetMs = Date.parse(startDateStr);
+            for (let i = 0; i < this.candleData.length; i++) {
+                const cTime = this.candleData[i].time;
+                const cMs = typeof cTime === 'number' ? cTime * 1000 : Date.parse(cTime);
+                if (cMs >= targetMs) {
+                    closestTime = cTime;
+                    break;
+                }
+            }
+            x1 = this.chart.timeScale().timeToCoordinate(closestTime);
+            if (x1 === null) x1 = 0;
+        }
 
         let x2 = this.chart.timeScale().timeToCoordinate(this.maxDate);
         if (x2 === null) x2 = this.canvas.width;
@@ -290,12 +305,13 @@ class ZoneRenderer {
         const labelY = topY + 12;
 
         // Nearest zone gets a special label (D1/D2/S1/S2)
-        let label = `${zone.zone_type.toUpperCase()[0]} · ${zone.timeframe}`;
+        const scoreStr = zone.strength_score !== undefined ? ` [${zone.strength_score}/7]` : '';
+        let label = `${zone.zone_type.toUpperCase()[0]} · ${zone.timeframe}${scoreStr}`;
         if (isNearest) {
             const rank = this._getNearestRank(zone);
-            label = `${rank} ${zone.timeframe} ${zone.is_fresh ? '✦' : ''}`;
+            label = `${rank} ${zone.timeframe}${scoreStr} ${zone.is_fresh ? '✦' : ''}`;
         } else if (this.filters.allTFMode) {
-            label = `${zone.zone_type[0].toUpperCase()} ${zone.timeframe}${zone.is_fresh ? ' ✦' : ''}`;
+            label = `${zone.zone_type[0].toUpperCase()} ${zone.timeframe}${scoreStr}${zone.is_fresh ? ' ✦' : ''}`;
         }
 
         ctx.font = isNearest ? 'bold 11px Arial' : '10px Arial';

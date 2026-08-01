@@ -100,6 +100,13 @@ def scan_demand_supply_zones(self, symbols=None):
     # Persist results to database
     _persist_scan_results(scan_data)
 
+    # Clean up obsolete records if this was a full scan
+    if not symbols:
+        from .models import DemandSupplyZone, DemandSupplyScanResult
+        DemandSupplyScanResult.objects.exclude(symbol__in=stock_symbols).delete()
+        DemandSupplyZone.objects.exclude(symbol__in=stock_symbols).delete()
+        logger.info("Cleaned up obsolete database records not in current scan.")
+
     summary = {
         'success': True,
         'total_scanned': scan_data['total_scanned'],

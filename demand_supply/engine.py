@@ -206,9 +206,31 @@ def find_demand_zones(df: pd.DataFrame) -> list[dict]:
         if zone_proximal <= zone_distal:
             continue
 
-        # Check if zone is fresh (price hasn't returned since formation)
-        future_data = data.iloc[i + 1:]
-        is_fresh = not (future_data['low'] <= zone_proximal).any()
+        # Leg Out count & gap
+        leg_out_count = 1
+        leg_out_gap = bool(breakout['open'] > zone_proximal)
+        
+        # Check forward for more consecutive leg-out candles
+        for k in range(i + 1, min(i + 4, len(data))):
+            c = data.iloc[k]
+            if _is_strong_move(c, avg_range, 1.0) and c['close'] > c['open']:
+                leg_out_count += 1
+            else:
+                break
+                
+        # Check if zone is fresh (test count)
+        future_data = data.iloc[i + leg_out_count:]
+        test_count = 0
+        in_test = False
+        for _, c in future_data.iterrows():
+            if c['low'] <= zone_proximal:
+                if not in_test:
+                    test_count += 1
+                    in_test = True
+            else:
+                in_test = False
+        
+        is_fresh = bool(test_count == 0)
 
         # Get the formed date
         formed_date = base_candles[0].get('date', data.iloc[i].get('date'))
@@ -225,6 +247,9 @@ def find_demand_zones(df: pd.DataFrame) -> list[dict]:
             'move_pct': round(float(move_pct), 2),
             'move_volume': int(breakout.get('volume', 0)),
             'is_fresh': is_fresh,
+            'test_count': test_count,
+            'leg_out_count': leg_out_count,
+            'leg_out_gap': leg_out_gap,
         })
 
     # De-duplicate overlapping zones — keep the strongest
@@ -289,9 +314,31 @@ def find_supply_zones(df: pd.DataFrame) -> list[dict]:
         if zone_distal <= zone_proximal:
             continue
 
-        # Check freshness
-        future_data = data.iloc[i + 1:]
-        is_fresh = not (future_data['high'] >= zone_proximal).any()
+        # Leg Out count & gap
+        leg_out_count = 1
+        leg_out_gap = bool(breakdown['open'] < zone_proximal)
+        
+        # Check forward for more consecutive leg-out candles
+        for k in range(i + 1, min(i + 4, len(data))):
+            c = data.iloc[k]
+            if _is_strong_move(c, avg_range, 1.0) and c['close'] < c['open']:
+                leg_out_count += 1
+            else:
+                break
+                
+        # Check if zone is fresh (test count)
+        future_data = data.iloc[i + leg_out_count:]
+        test_count = 0
+        in_test = False
+        for _, c in future_data.iterrows():
+            if c['high'] >= zone_proximal:
+                if not in_test:
+                    test_count += 1
+                    in_test = True
+            else:
+                in_test = False
+                
+        is_fresh = bool(test_count == 0)
 
         formed_date = base_candles[0].get('date', data.iloc[i].get('date'))
         if hasattr(formed_date, 'isoformat'):
@@ -307,6 +354,9 @@ def find_supply_zones(df: pd.DataFrame) -> list[dict]:
             'move_pct': round(float(move_pct), 2),
             'move_volume': int(breakdown.get('volume', 0)),
             'is_fresh': is_fresh,
+            'test_count': test_count,
+            'leg_out_count': leg_out_count,
+            'leg_out_gap': leg_out_gap,
         })
 
     zones = _dedup_zones(zones)
@@ -348,63 +398,37 @@ def _dedup_zones(zones: list[dict], overlap_threshold_pct: float = 2.0) -> list[
 # Zone Strength Scoring
 # ═════════════════════════════════════════════════════════════════════════════
 
-def score_zone_strength(zone: dict, avg_volume: float = 0) -> int:
+def score_zone_strength(zone: dict, avg_volume: float = 0) -> float:
     """
-    Score a zone's strength from 0-100 based on GTF criteria.
-
-    Scoring breakdown:
-        Freshness        → 0 or 30 points
-        Base tightness   → 5-25 points (fewer candles = better)
-        Move strength    → 5-25 points (bigger % move = better)
-        Volume spike     → 0-20 points (above-average volume on breakout)
+    Score a zone's strength based on the precise GTF Core Trade Score (0 to 7 points).
     """
-    score = 0
+    score = 0.0
 
-    # 1. Freshness (30 points)
-    if zone.get('is_fresh', False):
-        score += 30
+    # 1. Freshness (Max 3 points)
+    test_count = zone.get('test_count', 0)
+    if test_count == 0:
+        score += 3.0
+    elif test_count == 1:
+        score += 1.5
+    # test_count >= 2 -> 0 points
 
-    # 2. Base tightness (25 points max)
+    # 2. Strength / Leg Out (Max 2 points)
+    leg_out = zone.get('leg_out_count', 1)
+    has_gap = zone.get('leg_out_gap', False)
+    if leg_out >= 2 or (leg_out == 1 and has_gap):
+        score += 2.0
+    elif leg_out == 1:
+        score += 1.0
+
+    # 3. Base Candles (Max 2 points)
     base_count = zone.get('base_candles', 3)
-    if base_count <= 1:
-        score += 25
-    elif base_count <= 2:
-        score += 20
-    elif base_count <= 3:
-        score += 15
-    elif base_count <= 4:
-        score += 10
-    else:
-        score += 5
+    if 1 <= base_count <= 3:
+        score += 2.0
+    elif 4 <= base_count <= 5:
+        score += 1.0
+    # > 5 candles -> 0 points
 
-    # 3. Move strength (25 points max)
-    move_pct = abs(zone.get('move_pct', 0))
-    if move_pct >= 8:
-        score += 25
-    elif move_pct >= 5:
-        score += 20
-    elif move_pct >= 3:
-        score += 15
-    elif move_pct >= 2:
-        score += 10
-    else:
-        score += 5
-
-    # 4. Volume (20 points max)
-    if avg_volume > 0 and zone.get('move_volume', 0) > 0:
-        vol_ratio = zone['move_volume'] / avg_volume
-        if vol_ratio >= 2.0:
-            score += 20
-        elif vol_ratio >= 1.5:
-            score += 15
-        elif vol_ratio >= 1.0:
-            score += 10
-        else:
-            score += 5
-    else:
-        score += 10  # Neutral if no volume data
-
-    return min(score, 100)
+    return score
 
 
 # ═════════════════════════════════════════════════════════════════════════════

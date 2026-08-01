@@ -917,8 +917,9 @@
     const SYMBOL = "{{ symbol }}";
 </script>
 <!-- Chart Scripts -->
-<script src="/static/js/chart/api.js"></script>
-<script src="/static/js/chart/draw_rectangles.js"></script>
-<script src="/static/js/chart/chart.js"></script>
+<script src="{{ static('js/chart/api.js') }}?v=1.2"></script>
+<script src="{{ static('js/chart/draw_rectangles.js') }}?v=1.2"></script>
+<script src="{{ static('js/chart/chart.js') }}?v=1.2"></script>
+<script src="{{ static('js/chart/fyers_order.js') }}?v=1.2"></script>
 </body>
 </html>

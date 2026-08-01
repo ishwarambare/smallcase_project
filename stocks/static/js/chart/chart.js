@@ -22,16 +22,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ─── Filter state ───────────────────────────────────────────
     const filterState = {
-        freshOnly:       false,
+        freshOnly:       true,
         showDemand:      true,
         showSupply:      true,
         allTFMode:       false,
         showNearest:     true,
         minOverlap:      0,
-        showEMA20:       true,
-        showEMA50:       true,
-        showRSI:         true,
-        showCrossovers:  true,
+        showEMA20:       false,
+        showEMA50:       false,
+        showRSI:         false,
+        showCrossovers:  false,
         // Per-TF visibility (all on by default)
         activeTFs: ['quarterly', 'monthly', 'weekly', 'daily', '125min', '75min'],
     };
@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ─── Broker & Super Order Controller ─────────────────────
-    let activeBroker = 'DHAN'; // 'DHAN' or 'FYERS'
+    let activeBroker = 'FYERS'; // 'DHAN' or 'FYERS'
     let dhanPriceLines = { entry: null, stopLoss: null, target: null };
     let dhanPickingChartMode = false;
     let currentSide = 'BUY';
@@ -542,6 +542,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     checkBrokerStatus();
+    switchBroker(activeBroker);
 
     // Side selector listener
     const sideBuyBtn = document.getElementById('dhan-side-buy');

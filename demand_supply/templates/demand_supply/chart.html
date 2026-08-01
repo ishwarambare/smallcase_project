@@ -549,14 +549,14 @@
             <!-- ── Broker & Super Order Panel ─────────────────────── -->
             <div class="filter-section dhan-panel">
                 <div class="filter-section-title" style="display:flex;align-items:center;justify-content:space-between; margin-bottom: 8px;">
-                    <span id="panel-title">⚡ Dhan Trading Panel</span>
+                    <span id="panel-title">⚡ Fyers Trading Panel</span>
                     <span class="dhan-badge" id="broker-status-badge">Connecting...</span>
                 </div>
                 
                 <!-- Broker Toggle -->
                 <div class="broker-toggle-group" style="display:flex; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
-                    <button type="button" class="broker-btn active" id="btn-broker-dhan" style="flex:1; padding: 6px; background:var(--accent); color:#fff; border:none; cursor:pointer; font-size:12px; font-weight:600;">DHAN</button>
-                    <button type="button" class="broker-btn" id="btn-broker-fyers" style="flex:1; padding: 6px; background:transparent; color:var(--text-light); border:none; cursor:pointer; font-size:12px; font-weight:600;">FYERS</button>
+                    <button type="button" class="broker-btn" id="btn-broker-dhan" style="flex:1; padding: 6px; background:transparent; color:var(--text-light); border:none; cursor:pointer; font-size:12px; font-weight:600;">DHAN</button>
+                    <button type="button" class="broker-btn active" id="btn-broker-fyers" style="flex:1; padding: 6px; background:var(--accent); color:#fff; border:none; cursor:pointer; font-size:12px; font-weight:600;">FYERS</button>
                 </div>
 
                 <!-- Account Card -->
@@ -580,8 +580,8 @@
                 <!-- Product Type Selector -->
                 <div class="dhan-product-type-selector">
                     <select id="dhan-product-type" class="dhan-product-type-select">
+                        <option value="CNC" selected>Delivery (CNC)</option>
                         <option value="INTRA">Intraday (Margin)</option>
-                        <option value="CNC">Delivery (CNC)</option>
                     </select>
                 </div>
 
@@ -799,7 +799,7 @@
                         EMA 20
                     </span>
                     <label class="toggle-switch ema20">
-                        <input type="checkbox" id="filter-ema20" checked>
+                        <input type="checkbox" id="filter-ema20">
                         <span class="toggle-slider"></span>
                     </label>
                 </label>
@@ -810,7 +810,7 @@
                         EMA 50
                     </span>
                     <label class="toggle-switch ema50">
-                        <input type="checkbox" id="filter-ema50" checked>
+                        <input type="checkbox" id="filter-ema50">
                         <span class="toggle-slider"></span>
                     </label>
                 </label>
@@ -821,7 +821,7 @@
                         RSI 14 + Signal
                     </span>
                     <label class="toggle-switch rsi">
-                        <input type="checkbox" id="filter-rsi" checked>
+                        <input type="checkbox" id="filter-rsi">
                         <span class="toggle-slider"></span>
                     </label>
                 </label>
@@ -836,7 +836,7 @@
                         Cross Labels
                     </span>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="filter-crossovers" checked>
+                        <input type="checkbox" id="filter-crossovers">
                         <span class="toggle-slider"></span>
                     </label>
                 </label>

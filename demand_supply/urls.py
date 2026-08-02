@@ -40,5 +40,10 @@ urlpatterns = [
     path('api/fyers/status/', views.fyers_status, name='fyers_status'),
     path('api/fyers/place-super-order/', views.fyers_place_super_order, name='fyers_place_super_order'),
     path('api/fyers/place-alert/', views.fyers_place_alert, name='fyers_place_alert'),
+
+    # ── GTF Strategy Backtester ──────────────────────────────────────────────
+    path('demand-supply/backtest/', views.gtf_backtest_dashboard, name='gtf_backtest_dashboard'),
+    path('api/demand-supply/backtest/run/', views.api_run_gtf_backtest, name='api_run_gtf_backtest'),
 ]
+
 

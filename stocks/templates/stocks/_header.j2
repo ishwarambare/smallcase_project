@@ -38,7 +38,14 @@
                         <span>{{ _('D&S Zones') }}</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ url('gtf_backtest_dashboard') }}" class="{% if request.resolver_match.url_name == 'gtf_backtest_dashboard' %}active{% endif %}">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M18 9l-5 5-2-2-4 4"></path></svg>
+                        <span>{{ _('GTF Backtest') }}</span>
+                    </a>
+                </li>
             </ul>
+
 
         </nav>
 

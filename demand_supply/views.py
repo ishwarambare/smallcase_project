@@ -617,3 +617,66 @@ def fyers_place_alert(request):
         'success': res.get('s') == 'ok',
         'fyers_response': res,
     })
+
+
+# ── GTF Strategy Backtesting Views ───────────────────────────────────────────
+
+def gtf_backtest_dashboard(request):
+    """
+    GET /demand-supply/backtest/
+
+    Render the GTF Strategy Backtester interactive dashboard UI.
+    """
+    return render(request, 'demand_supply/gtf_backtest.j2')
+
+
+@csrf_exempt
+def api_run_gtf_backtest(request):
+    """
+    POST /api/demand-supply/backtest/run/
+
+    Executes GTF Intraday Strategy Backtest based on configuration.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST.dict()
+
+    symbols_input = data.get('symbols', ['RELIANCE', 'HDFCBANK', 'SBIN', 'TCS', 'INFY'])
+    if isinstance(symbols_input, str):
+        symbols = [s.strip().upper() for s in symbols_input.replace('\n', ',').split(',') if s.strip()]
+    elif isinstance(symbols_input, list):
+        symbols = [str(s).strip().upper() for s in symbols_input if str(s).strip()]
+    else:
+        symbols = ['RELIANCE', 'HDFCBANK', 'SBIN']
+
+    if not symbols:
+        symbols = ['RELIANCE', 'HDFCBANK', 'SBIN']
+
+    config = {
+        'start_date': data.get('start_date', '2025-09-01'),
+        'end_date': data.get('end_date', '2025-09-30'),
+        'htf_interval': data.get('htf_interval', '60m'),
+        'ltf_interval': data.get('ltf_interval', '15m'),
+        'initial_capital': float(data.get('initial_capital', 100000.0)),
+        'risk_per_trade': float(data.get('risk_per_trade', 1000.0)),
+        'min_score': float(data.get('min_score', 4.5)),
+        'max_r_multiple': float(data.get('max_r_multiple', 3.0)),
+        'max_base_candles': int(data.get('max_base_candles', 3)),
+        'base_candle_ratio': float(data.get('base_candle_ratio', 0.33)),
+        'min_wick_ratio': float(data.get('min_wick_ratio', 0.4))
+    }
+
+    from .backtest_engine import execute_multi_gtf_backtest
+    try:
+        results = execute_multi_gtf_backtest(symbols, config)
+        return JsonResponse(results)
+    except Exception as e:
+        import traceback
+        logger.error(f"GTF Backtest error: {e}\n{traceback.format_exc()}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+

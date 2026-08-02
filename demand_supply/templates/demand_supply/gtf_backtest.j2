@@ -1,0 +1,261 @@
+{# demand_supply/templates/demand_supply/gtf_backtest.j2 #}
+{# GTF Intraday Strategy Backtester Page #}
+{% extends 'stocks/base.j2' %}
+
+{% block title %}GTF Strategy Backtester — StockBasket{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{{ static('css/pages/gtf_backtest.css') }}?v=2.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="gtf-page-container">
+
+    {# ── Hero Header ────────────────────────────────────────────────────────── #}
+    <div class="gtf-hero">
+        <div class="gtf-hero-top">
+            <div class="gtf-badge-glow">⚡ GTF Multi-Timeframe Strategy Engine</div>
+            <div class="gtf-status-pill">
+                <span class="status-dot"></span> Fyers API v3 Active
+            </div>
+        </div>
+        <h1>Ultimate GTF Strategy Backtester</h1>
+        <p>Institutional Demand & Supply Zone Backtesting Engine based on Get Together Finance (GTF) rules: 60m HTF Zone Confluence, 15m Intraday Entry, GTF Scoring, Location Curve Filter, and 14:45 IST Cutoff.</p>
+    </div>
+
+    {# ── Controls & Configuration Card ────────────────────────────────────── #}
+    <div class="gtf-config-card">
+        <div class="gtf-card-header">
+            <div class="gtf-card-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                Strategy Parameters & Stock Selection
+            </div>
+            <div class="gtf-preset-bar">
+                <span class="preset-label">Quick Presets:</span>
+                <button type="button" class="btn-preset active" data-preset="top31">🔥 Top 31 Stocks</button>
+                <button type="button" class="btn-preset" data-preset="top10">Top 10</button>
+                <button type="button" class="btn-preset" data-preset="banks">🏦 Banking Stars</button>
+                <button type="button" class="btn-preset" data-preset="tech">💻 IT Giants</button>
+            </div>
+        </div>
+
+        <form id="gtf-backtest-form" class="gtf-form-grid">
+            {# Column 1: Symbols & Preset #}
+            <div class="gtf-form-group col-span-2">
+                <label for="input-symbols" class="gtf-label">Stock Symbols (Comma or newline separated)</label>
+                <textarea id="input-symbols" name="symbols" class="gtf-textarea" rows="3" placeholder="RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS...">RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS, ITC, LT, AXISBANK, SBIN, BHARTIARTL, TATASTEEL, BAJFINANCE, BAJAJ-AUTO, INDUSINDBK, HINDUNILVR, KOTAKBANK, TATAMOTORS, MARUTI, SUNPHARMA, TITAN, ULTRACEMCO, NTPC, POWERGRID, COALINDIA, HCLTECH, WIPRO, TECHM, ASIANPAINT, ADANIENT, ADANIPORTS, HDFCLIFE</textarea>
+                <span class="gtf-help">Top 31 High-Liquidity Stocks loaded. Fyers API v3 and live fallback sources supported.</span>
+            </div>
+
+            {# Column 2: Date Range & Quick Buttons #}
+            <div class="gtf-form-group">
+                <label for="input-start-date" class="gtf-label">Start Date</label>
+                <input type="date" id="input-start-date" name="start_date" class="gtf-input">
+                <div class="gtf-date-quick-btns">
+                    <button type="button" class="btn-date-quick" data-range="7d">Last 7D</button>
+                    <button type="button" class="btn-date-quick" data-range="30d">Last 30D</button>
+                    <button type="button" class="btn-date-quick" data-range="month">This Month</button>
+                </div>
+            </div>
+
+            <div class="gtf-form-group">
+                <label for="input-end-date" class="gtf-label">End Date</label>
+                <input type="date" id="input-end-date" name="end_date" class="gtf-input">
+                <span class="gtf-help">Automatic 60-day historical lookback applied for HTF zone detection.</span>
+            </div>
+
+            {# Column 3: Timeframe Configuration #}
+            <div class="gtf-form-group">
+                <label for="select-htf" class="gtf-label">Higher Timeframe (HTF)</label>
+                <select id="select-htf" name="htf_interval" class="gtf-select">
+                    <option value="60m" selected>60 Minutes (Hourly GTF standard)</option>
+                    <option value="1d">Daily (1D GTF Swing)</option>
+                    <option value="30m">30 Minutes</option>
+                </select>
+            </div>
+
+            <div class="gtf-form-group">
+                <label for="select-ltf" class="gtf-label">Lower Timeframe (LTF Entry)</label>
+                <select id="select-ltf" name="ltf_interval" class="gtf-select">
+                    <option value="15m" selected>15 Minutes (GTF Intraday)</option>
+                    <option value="5m">5 Minutes (Fast Scalp)</option>
+                    <option value="30m">30 Minutes</option>
+                </select>
+            </div>
+
+            {# Column 4: Capital & Risk Management #}
+            <div class="gtf-form-group">
+                <label for="input-capital" class="gtf-label">Initial Capital per Stock (₹)</label>
+                <input type="number" id="input-capital" name="initial_capital" class="gtf-input" value="100000" step="10000">
+            </div>
+
+            <div class="gtf-form-group">
+                <label for="input-risk" class="gtf-label">Risk Per Trade (₹)</label>
+                <input type="number" id="input-risk" name="risk_per_trade" class="gtf-input" value="1000" step="100">
+            </div>
+
+            {# Column 5: GTF Strategy Filters #}
+            <div class="gtf-form-group">
+                <label for="input-min-score" class="gtf-label">Min Trade Score (0 - 10)</label>
+                <input type="number" id="input-min-score" name="min_score" class="gtf-input" value="4.5" step="0.5" min="0" max="10">
+            </div>
+
+            <div class="gtf-form-group">
+                <label for="input-max-r" class="gtf-label">Target R-Multiple (Take Profit)</label>
+                <input type="number" id="input-max-r" name="max_r_multiple" class="gtf-input" value="3.0" step="0.5" min="1" max="10">
+            </div>
+
+            <div class="gtf-form-actions col-span-full">
+                <button type="submit" id="btn-run-backtest" class="gtf-btn gtf-btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Execute GTF Backtest</span>
+                </button>
+                <button type="button" id="btn-reset-form" class="gtf-btn gtf-btn-secondary">
+                    <span>Reset Defaults</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {# ── Progress Loader ────────────────────────────────────────────────────── #}
+    <div id="gtf-progress-container" class="gtf-progress-card" style="display: none;">
+        <div class="gtf-progress-header">
+            <span id="gtf-progress-status">Fetching multi-timeframe candle data via Fyers API & pre-calculating HTF zones...</span>
+            <span id="gtf-progress-percent">0%</span>
+        </div>
+        <div class="gtf-progress-track">
+            <div id="gtf-progress-bar" class="gtf-progress-fill"></div>
+        </div>
+    </div>
+
+    {# ── Results Dashboard Section ─────────────────────────────────────────── #}
+    <div id="gtf-results-section" style="display: none;">
+
+        {# ── KPI Stat Cards ──────────────────────────────────────────────────── #}
+        <div class="gtf-kpi-grid">
+            <div class="gtf-kpi-card">
+                <div class="kpi-icon blue">💰</div>
+                <div class="kpi-body">
+                    <div class="kpi-title">Total Portfolio P&L</div>
+                    <div id="kpi-total-pnl" class="kpi-value">₹0.00</div>
+                    <div id="kpi-pnl-pct" class="kpi-subtext">+0.00% Return</div>
+                </div>
+            </div>
+
+            <div class="gtf-kpi-card">
+                <div class="kpi-icon green">🎯</div>
+                <div class="kpi-body">
+                    <div class="kpi-title">Win Rate</div>
+                    <div id="kpi-win-rate" class="kpi-value">0.00%</div>
+                    <div id="kpi-win-breakdown" class="kpi-subtext">0 Wins / 0 Losses</div>
+                </div>
+            </div>
+
+            <div class="gtf-kpi-card">
+                <div class="kpi-icon purple">📊</div>
+                <div class="kpi-body">
+                    <div class="kpi-title">Total Executed Trades</div>
+                    <div id="kpi-total-trades" class="kpi-value">0</div>
+                    <div class="kpi-subtext">Type 1 (Immediate) & Type 2/3 (Confirmed)</div>
+                </div>
+            </div>
+
+            <div class="gtf-kpi-card">
+                <div class="kpi-icon amber">⚖️</div>
+                <div class="kpi-body">
+                    <div class="kpi-title">Profit Factor</div>
+                    <div id="kpi-profit-factor" class="kpi-value">0.00</div>
+                    <div class="kpi-subtext">Gross Profit / Gross Loss Ratio</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Analytics View Panel ────────────────────────────────────────────── #}
+        <div class="gtf-chart-card">
+            <div class="gtf-card-header">
+                <div class="gtf-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                    Cumulative Portfolio Equity Curve
+                </div>
+            </div>
+            <div class="gtf-chart-container">
+                <canvas id="equity-chart"></canvas>
+            </div>
+        </div>
+
+        {# ── Stock Performance Leaderboard Table ─────────────────────────────── #}
+        <div class="gtf-table-card">
+            <div class="gtf-card-header">
+                <div class="gtf-card-title">🏢 Symbol Performance Leaderboard</div>
+            </div>
+            <div class="gtf-table-wrapper">
+                <table class="gtf-table">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Total Trades</th>
+                            <th>Winning Trades</th>
+                            <th>Losing Trades</th>
+                            <th>Win Rate</th>
+                            <th>Total P&L (₹)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="symbol-summary-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# ── Detailed Executed Trades Breakdown ─────────────────────────────── #}
+        <div class="gtf-table-card">
+            <div class="gtf-card-header flex-between">
+                <div class="gtf-card-title">📋 Executed Trades Log Breakdown</div>
+                <div class="gtf-table-actions">
+                    <input type="text" id="trade-search-input" class="gtf-table-search" placeholder="Search Ticker, Status, Type...">
+                    <select id="trade-status-filter" class="gtf-table-select">
+                        <option value="ALL">All Statuses</option>
+                        <option value="TP">Take Profit (TP)</option>
+                        <option value="SL">Stop Loss (SL)</option>
+                        <option value="FORCED_EOD_CLOSE">EOD Force Close (14:45)</option>
+                    </select>
+                    <button type="button" id="btn-export-csv" class="gtf-btn gtf-btn-secondary btn-sm">
+                        📥 Export CSV
+                    </button>
+                </div>
+            </div>
+            <div class="gtf-table-wrapper">
+                <table class="gtf-table" id="trades-log-table">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>GTF Score</th>
+                            <th>Entry Time (IST)</th>
+                            <th>Exit Time (IST)</th>
+                            <th>Entry Price (₹)</th>
+                            <th>Exit Price (₹)</th>
+                            <th>Stop Loss (₹)</th>
+                            <th>Take Profit (₹)</th>
+                            <th>Qty</th>
+                            <th>Status</th>
+                            <th>PnL (₹)</th>
+                            <th>R Achieved</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-log-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script src="{{ static('js/pages/gtf-backtest.js') }}?v=2.0"></script>
+{% endblock %}

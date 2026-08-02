@@ -1,11 +1,25 @@
-import re
+import os
+import django
 
-with open(r'C:\Users\ishwa\.gemini\antigravity-ide\brain\cb8a6dd9-6098-4272-b4e0-cfa255ff11eb\.system_generated\steps\47\content.md', 'r', encoding='utf-8') as f:
-    content = f.read()
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'smallcase_project.settings')
+django.setup()
 
-strings = re.findall(r'\"([^\"]*import [^\"]+)\"', content)
-for s in strings:
-    s = s.encode('utf-8').decode('unicode_escape')
-    if 'def ' in s or 'import plotly' in s or 'import matplotlib' in s or 'import mplfinance' in s:
-        print('--- Code Block found ---')
-        print(s)
+from demand_supply.engine import scan_stock_zones, cache
+from stocks.fyers_service import FyersService
+
+# Clear the cache to force recalculation
+cache.clear()
+
+fyers = FyersService()
+result = scan_stock_zones("COALINDIA", fyers_svc=fyers)
+
+if result:
+    print("\n--- Weekly Demand Zones ---")
+    for z in result.get('demand_zones', {}).get('weekly', []):
+        print(f"[{z['formed_date']}] Distal: {z['distal']}, Proximal: {z['proximal']}, Base Candles: {z['base_candles']}, Status: {'Fresh' if z['is_fresh'] else 'Tested'}")
+    
+    print("\n--- Daily Demand Zones ---")
+    for z in result.get('demand_zones', {}).get('daily', []):
+        print(f"[{z['formed_date']}] Distal: {z['distal']}, Proximal: {z['proximal']}, Base Candles: {z['base_candles']}")
+else:
+    print("No result found.")

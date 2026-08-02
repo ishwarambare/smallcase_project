@@ -129,9 +129,12 @@ def _candle_body_pct(row) -> float:
 
 
 def _is_small_candle(row, avg_range: float) -> bool:
-    """A candle is 'small' if its range is less than 75% of the average range."""
+    """A candle is a 'Base Candle' if its body is less than 50% of its total range."""
     candle_range = row['high'] - row['low']
-    return candle_range < (avg_range * 0.75)
+    if candle_range == 0:
+        return True
+    body = abs(row['close'] - row['open'])
+    return (body / candle_range) <= 0.50
 
 
 def _is_strong_move(row, avg_range: float, multiplier: float = 1.0) -> bool:
@@ -186,21 +189,31 @@ def find_demand_zones(df: pd.DataFrame) -> list[dict]:
         # Look backwards for the base (consolidation)
         base_start = max(0, i - MAX_BASE_CANDLES)
         base_candles = []
+        leg_in_idx = -1
 
         for j in range(i - 1, base_start - 1, -1):
             candle = data.iloc[j]
             if _is_small_candle(candle, avg_range):
                 base_candles.insert(0, candle)
             else:
+                leg_in_idx = j
                 break
 
         if len(base_candles) < 1:
             continue
 
-        # Zone = Distal (lowest wick) to Proximal (highest body)
+        # Zone = Distal (lowest wick of pattern) to Proximal (highest body of base)
         base_lows = [c['low'] for c in base_candles]
+        distal_candidates = base_lows.copy()
+        
+        if leg_in_idx != -1:
+            distal_candidates.append(data.iloc[leg_in_idx]['low'])
+            
+        distal_candidates.append(breakout['low'])
+
         base_high_bodies = [max(c['open'], c['close']) for c in base_candles]
-        zone_distal = min(base_lows)   # Bottom of zone (lowest wick)
+        
+        zone_distal = min(distal_candidates)   # Bottom of zone (lowest wick)
         zone_proximal = max(base_high_bodies)  # Top of zone (highest body)
 
         if zone_proximal <= zone_distal:
@@ -294,21 +307,31 @@ def find_supply_zones(df: pd.DataFrame) -> list[dict]:
         # Look backwards for the base
         base_start = max(0, i - MAX_BASE_CANDLES)
         base_candles = []
+        leg_in_idx = -1
 
         for j in range(i - 1, base_start - 1, -1):
             candle = data.iloc[j]
             if _is_small_candle(candle, avg_range):
                 base_candles.insert(0, candle)
             else:
+                leg_in_idx = j
                 break
 
         if len(base_candles) < 1:
             continue
 
-        # Zone = Distal (highest wick) to Proximal (lowest body)
+        # Zone = Distal (highest wick of pattern) to Proximal (lowest body of base)
         base_highs = [c['high'] for c in base_candles]
+        distal_candidates = base_highs.copy()
+        
+        if leg_in_idx != -1:
+            distal_candidates.append(data.iloc[leg_in_idx]['high'])
+            
+        distal_candidates.append(breakdown['high'])
+
         base_low_bodies = [min(c['open'], c['close']) for c in base_candles]
-        zone_distal = max(base_highs)   # Top of zone (highest wick)
+        
+        zone_distal = max(distal_candidates)   # Top of zone (highest wick)
         zone_proximal = min(base_low_bodies)   # Bottom of zone (lowest body)
 
         if zone_distal <= zone_proximal:

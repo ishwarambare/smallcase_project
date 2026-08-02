@@ -28,9 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         allTFMode:       false,
         showNearest:     true,
         minOverlap:      0,
-        showEMA20:       false,
-        showEMA50:       false,
-        showRSI:         false,
+        showEMA20:       true,
+        showEMA50:       true,
+        showRSI:         true,
         showCrossovers:  false,
         // Per-TF visibility (all on by default)
         activeTFs: ['quarterly', 'monthly', 'weekly', 'daily', '125min', '75min'],
